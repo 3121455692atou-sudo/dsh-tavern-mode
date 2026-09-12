@@ -1,0 +1,10 @@
+{
+  "name": "@vue/devtools-api",
+  "version": "8.2.1",
+  "license": "MIT",
+  "repository": {
+    "directory": "packages/devtools-api",
+    "type": "git",
+    "url": "git+https://github.com/vuejs/devtools.git"
+  }
+}

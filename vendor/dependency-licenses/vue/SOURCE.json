@@ -1,0 +1,9 @@
+{
+  "name": "vue",
+  "version": "3.5.42",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuejs/core.git"
+  }
+}

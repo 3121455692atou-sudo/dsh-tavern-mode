@@ -1,0 +1,9 @@
+{
+  "name": "vue-router",
+  "version": "5.3.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuejs/router.git"
+  }
+}

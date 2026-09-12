@@ -1,0 +1,9 @@
+{
+  "name": "async-wait-until",
+  "version": "2.0.31",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devlato/async-wait-until.git"
+  }
+}

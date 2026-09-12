@@ -1,0 +1,7 @@
+node_modules/
+.work/
+output/
+*.tgz
+.env*
+.npmrc
+.playwright-cli/

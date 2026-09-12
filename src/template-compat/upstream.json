@@ -1,0 +1,164 @@
+{
+  "generatedAt": "2026-09-11T13:50:52.520Z",
+  "upstream": {
+    "sillyTavern": "1.18.0",
+    "promptTemplate": "1.17.1",
+    "seedrandom": "3.0.5"
+  },
+  "revisions": {
+    "sillyTavern": "51ad27fb86d39a3daca3adaa970375c9670c12df",
+    "promptTemplate": "5cbb2cedf9f3ca25820516365f2da4e174904422"
+  },
+  "sourceFiles": {
+    "package.json": "d712414b552e27c6284cb75202fb9af75ad0db1f340ce1fa7ea739e625a9a960",
+    "public/scripts/extensions/third-party/ST-Prompt-Template/manifest.json": "cfd228e05d7cd6d636b525b1d0b1a963b3cb51766b992661441997337c226a62",
+    "node_modules/seedrandom/package.json": "f93348642af783cca495e5a31a22df5613ccf24ca167c9c4347416627a015a09",
+    "public/scripts/utils.js": "7236069f0d6c95b0d959e3c574bc7acbd4dc088459371abf38a6a7a77a076067",
+    "public/scripts/macros.js": "1926c394e22a35827f594a4c4bfb044ed4c80dcc911680875991a880f8e53f11",
+    "node_modules/seedrandom/seedrandom.js": "df5431fa9ba4b311f182a046e60cdd36ae37a1a80f515d6e9b1f568528735047",
+    "public/scripts/extensions/regex/engine.js": "091bb3402a12552cf1754d6e4d2b44df38d3553aa374539896c716e78905d350",
+    "public/scripts/world-info.js": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38",
+    "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts": "ca53eb9547cfbe22764bee3e024c7dc2055a8d0f8969ed19350514a4bec28afa",
+    "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/ejs.ts": "358bf3855261af88bd92a55dcfb36c03b260b07065aa8af11f763f55cd452402",
+    "public/scripts/extensions/third-party/ST-Prompt-Template/src/3rdparty/ejs.js": "66b3c84f33adbf154950e18cb55704062e3fa5e2f4e69001f6df296d11548d54",
+    "LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "public/scripts/extensions/third-party/ST-Prompt-Template/LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "node_modules/ejs/LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  "declarations": [
+    {
+      "file": "public/scripts/utils.js",
+      "name": "getStringHash",
+      "startLine": 522,
+      "endLine": 539,
+      "sha256": "cb58aca21c86d5873fc6e52d37f9afd30c9069352afc174b4465bb2866d2b695"
+    },
+    {
+      "file": "public/scripts/macros.js",
+      "name": "getChatIdHash",
+      "startLine": 315,
+      "endLine": 328,
+      "sha256": "13878f99c4e1f55c15576e71333af511be87f16b8c49f0310e6d53adad6f8e4f"
+    },
+    {
+      "file": "public/scripts/macros.js",
+      "name": "getPickReplaceMacro",
+      "startLine": 516,
+      "endLine": 545,
+      "sha256": "290ae7c29a31f84bf54457b8a20f13dfcd03b92b6f7af9c1e3c2ae4ad8c2c844"
+    },
+    {
+      "file": "node_modules/seedrandom/seedrandom.js",
+      "name": "seedrandom module",
+      "sha256": "df5431fa9ba4b311f182a046e60cdd36ae37a1a80f515d6e9b1f568528735047",
+      "adaptation": "ESM return/export replaces CommonJS/AMD/global registration; unused Node crypto autoseed hook removed; PRNG body unchanged."
+    },
+    {
+      "file": "public/scripts/extensions/regex/engine.js",
+      "name": "getRegexedString",
+      "startLine": 334,
+      "endLine": 381,
+      "sha256": "83fc990668be66679fdac570acd8941d60527a15eb6eaff7376d5e1f635bf55e"
+    },
+    {
+      "file": "public/scripts/world-info.js",
+      "name": "world_info_position",
+      "startLine": 855,
+      "endLine": 864,
+      "sha256": "0f88d9bd27b5262c058c59852146e62644b74729fd77255a1794a2c25d985fde"
+    },
+    {
+      "file": "public/scripts/world-info.js",
+      "name": "DEFAULT_DEPTH",
+      "startLine": 96,
+      "endLine": 96,
+      "sha256": "7ad028f1a9ac6b08bf975f44cca4fd754cb95838b4001228d9762866cb6981fb"
+    },
+    {
+      "file": "public/scripts/world-info.js",
+      "name": "METADATA_KEY",
+      "startLine": 94,
+      "endLine": 94,
+      "sha256": "cbf83a24760e778c7fdaffe65b63f41d71e8a6d268402237df7bff34ba6f63a1"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "KNOWN_DECORATORS",
+      "startLine": 10,
+      "endLine": 26,
+      "sha256": "afb4da9303dfda87ceba6a9a23bf23a0412344043ade12aaeee154f76eae965d"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "DEPTH_MAPPING",
+      "startLine": 675,
+      "endLine": 682,
+      "sha256": "a382676491a4243b52a9b7bab2b40b3011ed10738e401c3ec1228e401d897701"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "getWorldInfoSorter",
+      "startLine": 684,
+      "endLine": 686,
+      "sha256": "2871f40a082c827054e984fae33b874028554adcb1d0a05e49871920bf835728"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "worldInfoSorter",
+      "startLine": 688,
+      "endLine": 719,
+      "sha256": "fb67c62f2c78af908c03ed2fe8b8c48d18a9ff1010558635bcc434a134702e50"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "parseDecorators",
+      "startLine": 827,
+      "endLine": 889,
+      "sha256": "cef79b4fded94d506fd81dbca32c776693a9fb68dc55a1f1fd0afc6f962ebc4b"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "getWorldInfoEntries",
+      "startLine": 212,
+      "endLine": 233,
+      "sha256": "ac45557bcec9abc715a036ecd3a2a8d6636290b4d2762a72eea2568fe396eac5"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/worldinfo.ts",
+      "name": "getWorldInfoEntry",
+      "startLine": 259,
+      "endLine": 276,
+      "sha256": "38f49ffb4d5fe9e47c838c7835e65642c1f1d4dd5919b8f999e32dc43e792365"
+    },
+    {
+      "file": "public/scripts/extensions/third-party/ST-Prompt-Template/src/function/ejs.ts",
+      "name": "boundedReadWorldinfo",
+      "startLine": 321,
+      "endLine": 356,
+      "sha256": "2de63c7c83428735578fada5d82523e5b66e6045f1e4e58669c999d99c1f54fe"
+    }
+  ],
+  "adaptations": {
+    "ejs.cjs": "Byte-for-byte upstream EJS compiler copy; .cjs extension selects the existing UMD CommonJS export. Apache-2.0; original notices retained.",
+    "pick.js": "Unchanged upstream hash/chat hash/pick declarations in a per-call host closure; chatMetadata and sessionId supplied by the local caller.",
+    "regex.js": "Unchanged upstream getRegexedString dispatch declaration; preselected scripts and existing local replacement callback supplied by caller. Expected skip debug logging silenced to preserve template JSON IPC. Full regex engine not imported.",
+    "worldinfo.js": "Upstream TypeScript declarations extracted and type-erased by esbuild without bundling. Host receives only the worldbooks supplied in the template environment. No network worldbook loader or extension lifecycle.",
+    "seedrandom.js": "Seedrandom 3.0.5 MIT code with ESM export wrapper as described in declarations; numeric-seed output unchanged."
+  },
+  "licenses": {
+    "ejs.cjs": "Apache-2.0",
+    "seedrandom.js": "MIT (full notice in file)",
+    "pick.js": "AGPL-3.0; getStringHash includes upstream cyrb53 attribution",
+    "regex.js": "AGPL-3.0",
+    "worldinfo.js": "AGPL-3.0"
+  },
+  "generatedFiles": {
+    "ejs.cjs": "66b3c84f33adbf154950e18cb55704062e3fa5e2f4e69001f6df296d11548d54",
+    "pick.js": "9bd57fb7caa5bf74d160ec9339db51657dca191a661622a9031dc415004def01",
+    "regex.js": "21e7063fd44250c151356e2e778220a57afa031150c766c01aa15101110bdbf9",
+    "worldinfo.js": "8d5c6e4af702fbd40905f22f64f0290abb09444fff41a393fd3081119e8c6c6f",
+    "seedrandom.js": "4d4f38942cadf5a4a0c308457b3531a23694f3d3b4360c1c89458c3fb05c04f4",
+    "LICENSE-AGPL-3.0": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "LICENSE-EJS-Apache-2.0": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}

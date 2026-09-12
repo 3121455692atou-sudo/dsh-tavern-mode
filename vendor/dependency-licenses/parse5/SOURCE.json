@@ -1,0 +1,9 @@
+{
+  "name": "parse5",
+  "version": "8.0.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/inikulin/parse5.git"
+  }
+}

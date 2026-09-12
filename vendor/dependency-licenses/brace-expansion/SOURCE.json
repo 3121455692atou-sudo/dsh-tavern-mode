@@ -1,0 +1,9 @@
+{
+  "name": "brace-expansion",
+  "version": "2.1.4",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/juliangruber/brace-expansion.git"
+  }
+}

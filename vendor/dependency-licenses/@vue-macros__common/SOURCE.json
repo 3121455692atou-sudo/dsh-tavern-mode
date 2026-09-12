@@ -1,0 +1,10 @@
+{
+  "name": "@vue-macros/common",
+  "version": "3.1.4",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vue-macros/vue-macros.git",
+    "directory": "packages/common"
+  }
+}

@@ -1,0 +1,13 @@
+import { build } from 'esbuild';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { buildHelper } from '../src/helper-build.js';
+import { resolve } from 'node:path';
+await mkdir('lib', { recursive: true });
+const speechScript = JSON.parse(await readFile('vendor/bubble-script.json', 'utf8'));
+speechScript.content = await readFile('src/speech-desk.js', 'utf8');
+await writeFile('vendor/bubble-script.json', JSON.stringify(speechScript, null, 2) + '\n');
+await buildHelper(resolve('vendor/tavern-helper'), resolve('lib/tavern-helper.js'));
+await build({ entryPoints: ['src/realm.js'], bundle: true, format: 'iife', platform: 'browser', target: 'es2022', outfile: 'lib/realm.js', external: ['/tavern-helper.js'], sourcemap: false, minify: false, define: { __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false' } });
+await build({ entryPoints: ['src/component.js'], bundle: true, format: 'iife', platform: 'browser', target: 'es2022', outfile: 'lib/component.js', sourcemap: false });
+const client = await build({ entryPoints: ['src/native-client.jsx'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false, external: ['react', '@deepseek-ai/dsh-client-ui-primitives'] });
+await writeFile('lib/client.js', `window.__ModuleLoader__.load({ id: 'dsh-tavern-mode', factory: require => { const module = { exports: {} }; const exports = module.exports;\n${client.outputFiles[0].text}\nreturn module.exports; } });\n`);

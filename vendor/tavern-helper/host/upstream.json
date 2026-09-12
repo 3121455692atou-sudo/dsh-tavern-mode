@@ -1,0 +1,68 @@
+{
+  "repository": "https://github.com/SillyTavern/SillyTavern",
+  "version": "1.18.0",
+  "commit": "51ad27fb86d39a3daca3adaa970375c9670c12df",
+  "extraction": "Verbatim declarations; source order adjusted only for standalone initialization. No browser editor or scan engine bundled.",
+  "declarations": [
+    {
+      "path": "public/scripts/constants.js",
+      "declaration": "export const GENERATION_TYPE_TRIGGERS =",
+      "line": 36,
+      "sha256": "7b725daf6c503ec82421834b00932d50353dc174dd783344049df4b8b2149226",
+      "sourceSha256": "953a09a8cea181f6d82e2aafbb021e7bc3649a41a144d0e798d8e19b99cf4066"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const world_info_logic =",
+      "line": 33,
+      "sha256": "59c7d74b59d69dc5029edd59acce61e03f4cc4435548c1e984b3cde8d564878e",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const DEFAULT_DEPTH =",
+      "line": 96,
+      "sha256": "9e44dccbd76731cc50da8cfcfb14de83583f22377aab8a9a49dc9c5635f0671e",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const DEFAULT_WEIGHT =",
+      "line": 97,
+      "sha256": "d9797f2441bc99e219115b53c1498879773fcb83147e8fd28b00b66a222f38ba",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const world_info_position =",
+      "line": 855,
+      "sha256": "d882ca66e1771971e96c8ee1649ac2a76be8eb9495318f793717704c2b5d7832",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export function parseRegexFromString(",
+      "line": 2821,
+      "sha256": "d6a06bdabd8af09e4a38ce52a4754fb155d9329656195d3c4fbdc5b291d40179",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const newWorldInfoEntryDefinition =",
+      "line": 4002,
+      "sha256": "41cdd80f1acb209ea3d656498eb3b43a41d4d4adbba85c651ca5f59af5822337",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "path": "public/scripts/world-info.js",
+      "declaration": "export const newWorldInfoEntryTemplate =",
+      "line": 4047,
+      "sha256": "b4e3650c6263ebb1fecd1ce62bc16a60b7b5e89613f2a33ee6bdc6faa99ce37f",
+      "sourceSha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    }
+  ],
+  "files": {
+    "world-info.js": "9c61eb4dbb1d310c481623b3155c4a750e7614a059f2775a94ba06ad09ed3d64",
+    "LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
+  }
+}

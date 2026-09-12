@@ -1,0 +1,10 @@
+{
+  "name": "@jridgewell/gen-mapping",
+  "version": "0.3.13",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jridgewell/sourcemaps.git",
+    "directory": "packages/gen-mapping"
+  }
+}

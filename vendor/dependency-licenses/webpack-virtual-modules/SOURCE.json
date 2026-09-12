@@ -1,0 +1,9 @@
+{
+  "name": "webpack-virtual-modules",
+  "version": "0.6.2",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sysgears/webpack-virtual-modules.git"
+  }
+}

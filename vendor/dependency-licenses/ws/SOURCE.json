@@ -1,0 +1,9 @@
+{
+  "name": "ws",
+  "version": "8.21.3",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/websockets/ws.git"
+  }
+}

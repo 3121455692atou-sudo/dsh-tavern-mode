@@ -1,0 +1,9 @@
+{
+  "name": "entities",
+  "version": "8.1.0",
+  "license": "BSD-2-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fb55/entities.git"
+  }
+}

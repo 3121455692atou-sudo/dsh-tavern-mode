@@ -1,0 +1,10 @@
+{
+  "name": "@types/trusted-types",
+  "version": "2.0.7",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+    "directory": "types/trusted-types"
+  }
+}

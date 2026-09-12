@@ -1,0 +1,10 @@
+{
+  "name": "@jridgewell/sourcemap-codec",
+  "version": "1.6.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jridgewell/sourcemaps.git",
+    "directory": "packages/sourcemap-codec"
+  }
+}

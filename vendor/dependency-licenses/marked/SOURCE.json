@@ -1,0 +1,9 @@
+{
+  "name": "marked",
+  "version": "17.0.6",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/markedjs/marked.git"
+  }
+}

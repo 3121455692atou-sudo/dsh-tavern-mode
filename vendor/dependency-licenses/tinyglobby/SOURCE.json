@@ -1,0 +1,9 @@
+{
+  "name": "tinyglobby",
+  "version": "0.2.17",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SuperchupuDev/tinyglobby.git"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/SillyTavern/SillyTavern",
+  "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8",
+  "file": "default/content/presets/openai/Default.json",
+  "sha256": "c83f0922af22a0ba82de89f56c11cba0c6dc50b0f3037fe0055908284cefee62",
+  "runtime": "Prompt text and order unchanged; openai_max_tokens and openai_max_context are omitted from the builtin runtime preset."
+}

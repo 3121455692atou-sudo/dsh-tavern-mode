@@ -1,0 +1,10 @@
+{
+  "name": "@deepseek-ai/dsh-invariants",
+  "version": "0.1.5-rc.2",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/runtime-diagnostics/invariants"
+  }
+}

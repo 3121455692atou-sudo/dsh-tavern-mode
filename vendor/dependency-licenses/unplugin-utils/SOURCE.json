@@ -1,0 +1,9 @@
+{
+  "name": "unplugin-utils",
+  "version": "0.3.2",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sxzz/unplugin-utils.git"
+  }
+}

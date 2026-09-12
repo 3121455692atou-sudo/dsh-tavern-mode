@@ -1,0 +1,10 @@
+{
+  "name": "@jridgewell/trace-mapping",
+  "version": "0.3.31",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jridgewell/sourcemaps.git",
+    "directory": "packages/trace-mapping"
+  }
+}

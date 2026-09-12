@@ -1,0 +1,10 @@
+{
+  "name": "@vue/runtime-dom",
+  "version": "3.5.42",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuejs/core.git",
+    "directory": "packages/runtime-dom"
+  }
+}

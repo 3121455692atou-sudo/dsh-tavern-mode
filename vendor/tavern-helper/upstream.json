@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/N0VI028/JS-Slash-Runner",
+  "commit": "9481c5a34f74007a3f3211fd376f486e617654ab",
+  "files": {
+    "manifest.json": "8c3b8e4abcd63caeb4783088bf53f57e014c6d27acd0bcb1af110a1af6f67dd1",
+    "LICENSE": "676ad37b8ba9003804ab83aebce60fd46cd2c8fcbb1446fa1dd6de2c6f22ef03",
+    "src/function/preset.ts": "cb87f8af8c3c9cbe65c7fd71721f2e9c68af42a1f079f62c18d67d24f9b3bd85",
+    "src/function/tavern_regex.ts": "6c2bcede950ab76290787edb3249c592b5391b3d9fc455ed8cd1a966d4e503f9",
+    "src/function/event.ts": "0ebfcb420bd256eb9f78bb38195922605451d8dab4c82e24d0fc75f23962044d",
+    "src/function/global.ts": "acbf1da9d416df94763ee727d35b488516626fa5f1be17f481746a1e18441270",
+    "src/function/util.ts": "028b46f2d138d383f40a9ec409d9c631244b7a19d65649703a30829372fc4ca6",
+    "src/function/version.ts": "a5b0ed51aad84ff70010547d3ee60bcbd1b5e79553a88327172f1d2c43d287b5",
+    "src/util/algorithm.ts": "466d4d010a6533babb16fa2af7f0061a7a9cc931616d49410164c22b269e6376",
+    "src/util/compatibility.ts": "ab3d2285ed2b5139fe761190e8afd91528da861fe7f5b224f3096a76f7a42779",
+    "src/function/lorebook_entry.ts": "dd533685c071d0d931bc0d848554db70db2b25cee0288a1ab9990c29c0ffced4",
+    "src/function/worldbook.ts": "1860ad65613949c099bbf4a182b888c33a8150305ff3b6071f81f15bb4071d94"
+  }
+}

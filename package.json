@@ -1,0 +1,96 @@
+{
+  "name": "dsh-tavern-mode",
+  "version": "0.4.0",
+  "description": "DSH 酒馆模式：角色卡、预设、前端、独立角色记忆与多 agent 剧情",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./agent": "./src/native-agent.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=26.4"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-agent-preset",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.mjs",
+    "prepack": "npm run build"
+  },
+  "allowScripts": {
+    "esbuild": true
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
+    "ajv": "^8.17.1",
+    "async-wait-until": "^2.0.31",
+    "dompurify": "^3.3.0",
+    "ejs": "^3.1.10",
+    "esbuild": "^0.25.12",
+    "fake-indexeddb": "^6.2.0",
+    "fflate": "^0.8.2",
+    "is-promise": "^4.0.0",
+    "jquery": "^3.7.1",
+    "klona": "^2.0.6",
+    "lodash": "^4.17.21",
+    "marked": "^17.0.0",
+    "parse5": "^8.0.1",
+    "vue": "3.5.42",
+    "vue-router": "5.3.1",
+    "ws": "8.21.3",
+    "yaml": "2.9.0",
+    "zod": "4.6.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-session": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-session-persistence": "^0.1.5-rc.1"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Atonelia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3121455692atou-sudo/dsh-tavern-mode.git"
+  },
+  "homepage": "https://github.com/3121455692atou-sudo/dsh-tavern-mode#readme",
+  "bugs": {
+    "url": "https://github.com/3121455692atou-sudo/dsh-tavern-mode/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "sillytavern",
+    "roleplay"
+  ],
+  "files": [
+    "src/",
+    "lib/",
+    "vendor/",
+    "scripts/build.mjs",
+    "presets/",
+    "cordis.patch.yml",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

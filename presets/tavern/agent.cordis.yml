@@ -1,0 +1,8 @@
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: 根据角色卡、用户输入与角色的独立记忆进行互动创作。
+    complete: true
+    includeRuntimeContext: false
+- id: tavern-agent
+  name: dsh-tavern-mode/agent

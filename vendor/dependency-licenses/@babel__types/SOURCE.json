@@ -1,0 +1,10 @@
+{
+  "name": "@babel/types",
+  "version": "7.29.8",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babel/babel.git",
+    "directory": "packages/babel-types"
+  }
+}
