@@ -8,6 +8,15 @@
 
 需要 Node.js 26.4 或更新版本；本版本在 DeepSeek Harness 0.1.5-rc.1 上验证。
 
+dsh 安装插件需要系统 PATH 中有 pnpm。没有安装时先执行：
+
+```bash
+npm install -g pnpm@11.21.0
+pnpm --version
+```
+
+然后复制下面完整的一行命令（包括网址）安装插件：
+
 ```bash
 dsh plugin --profile web add --allow-build=esbuild https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz
 ```
