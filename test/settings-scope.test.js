@@ -10,12 +10,15 @@ import { defaultTables } from '../src/defaults.js';
 
 test('Conversation settings survive card selection and remain separate from later global defaults', async t => {
   const root = await mkdtemp(join(tmpdir(), 'tavern-settings-')), disposers = [];
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = root;
+  t.after(() => { if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome; });
   let handler;
   const sessions = new Map(['first', 'next'].map(id => [id, { id, header: {}, snapshotEvents: () => [] }]));
   const ctx = { sessions, agents: new Map(), llm: {}, connection: { requestRejection: () => null }, sessionProjections: { stateOf: () => 'tavern' }, reflect: { provide(name, value) { ctx[name] = value; } }, on() {}, effect(fn) { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose); }, webServer: { register(options) { handler = options.handler; return () => {}; }, registerUpgrade: () => () => {} } };
   t.after(async () => { for (const dispose of disposers.toReversed()) await dispose(); await rm(root, { recursive: true, force: true }); });
-  await apply(ctx, { dataDir: root });
-  const store = new Store(root);
+  await apply(ctx, { dataDir: 'tavern-data' });
+  const store = new Store(join(root, 'tavern-data'));
   const preset = content => ({ prompts: [{ identifier: 'main', name: '主提示词', role: 'system', content }], prompt_order: [{ character_id: 100001, order: [{ identifier: 'main', enabled: true }] }] });
   await store.putItem({ id: 'card', kind: 'card', name: '图书馆', data: { name: '图书馆', first_mes: '开门了。' } });
   await store.putItem({ id: 'preset', kind: 'preset', name: '参观预设', data: preset('原始提示词') });

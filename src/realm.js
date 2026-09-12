@@ -444,7 +444,7 @@ const promptManager = {
 };
 window.__tavernModules = {
   promptManager, Message, MessageCollection, getPresetManager,
-  displayVersion: 'dsh-tavern-mode 0.3.6', streamingProcessor: null,
+  displayVersion: 'dsh-tavern-mode 0.4.1', streamingProcessor: null,
   equalsIgnoreCaseAndAccents: (a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }) === 0,
   getSanitizedFilename: name => String(name).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_'),
   sendOpenAIRequest: async (type, messages) => ({ choices: [{ message: { role: 'assistant', content: await rpc('generate', { raw: true, messages }) } }] }),

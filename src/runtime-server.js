@@ -35,7 +35,7 @@ export async function startRuntimeServer(ctx, root, helper, moduleCache) {
       } catch (error) { res.statusCode = 400; res.end(JSON.stringify({ error: error.message })); }
       return;
     }
-    if (req.method === 'GET' && path === '/version') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ pkgVersion: '1.14.0', compatibility: true, product: 'dsh-tavern-mode', productVersion: '0.4.0' })); return; }
+    if (req.method === 'GET' && path === '/version') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ pkgVersion: '1.14.0', compatibility: true, product: 'dsh-tavern-mode', productVersion: '0.4.1' })); return; }
     if (req.method === 'GET' && path === '/fontawesome.css') {
       const styles = await Promise.all(['fontawesome.min.css', 'solid.min.css', 'brands.min.css'].map(name => readFile(join(root, 'vendor/fontawesome', name), 'utf8')));
       res.setHeader('content-type', 'text/css'); res.end(styles.join('\n')); return;

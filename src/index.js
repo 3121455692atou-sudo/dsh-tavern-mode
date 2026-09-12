@@ -1,7 +1,7 @@
 import { sessionAssets as loadSessionAssets } from './session-assets.js';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { join, dirname, extname } from 'node:path';
+import { join, dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir } from 'node:fs/promises';
 import { Store, readJson, atomicJson, safeId } from './storage.js';
@@ -40,7 +40,7 @@ function record(value, label) { if (!value || typeof value !== 'object' || Array
 
 export async function apply(ctx, config = {}) {
   await installPreset();
-  const store = new Store(config.dataDir ?? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'tavern'));
+  const store = new Store(resolve(process.env.DSH_HOME ?? join(homedir(), '.dsh'), config.dataDir ?? 'tavern'));
   await store.init();
   await mkdir(join(store.root, 'runtime'), { recursive: true, mode: 0o700 });
   const sharedAssets = new SharedAssets(store);
@@ -102,7 +102,7 @@ export async function apply(ctx, config = {}) {
         try { return { ...provider, provider: name, models: await ctx.llm.listModels(name) }; }
         catch (error) { return { ...provider, provider: name, models: [], error: error.message }; }
       }));
-      json(res, { version: '0.3.6', dshVersion: '0.1.5-rc.1', runtimeOrigin, helper: helper.status(), library: await store.library(), sessions: await store.sessions(), ...(await globalConfig()), providers: models }); return;
+      json(res, { version: '0.4.1', dshVersion: '0.1.5-rc.1', runtimeOrigin, helper: helper.status(), library: await store.library(), sessions: await store.sessions(), ...(await globalConfig()), providers: models }); return;
     }
     if (req.method === 'GET' && path === '/session') { json(res, await browserPayload(await store.session(url.searchParams.get('id'), url.searchParams.get('revision')))); return; }
     if (req.method === 'GET' && path === '/item') { json(res, await store.item(url.searchParams.get('id'))); return; }

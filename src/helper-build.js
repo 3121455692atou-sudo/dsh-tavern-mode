@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,7 +10,7 @@ const hostModules = new Set(['@/util/tavern', '@/function/extension', '@/functio
 
 export async function buildHelper(source, outfile) {
   return build({
-    entryPoints: [join(project, 'src/helper-entry.js')], outfile, bundle: true, metafile: true, format: 'esm', platform: 'browser', target: 'es2022', logLevel: 'silent', nodePaths: [join(project, 'node_modules')],
+    entryPoints: [join(project, 'src/helper-entry.js')], outfile, bundle: true, metafile: true, format: 'esm', platform: 'browser', target: 'es2022', logLevel: 'silent', nodePaths: createRequire(import.meta.url).resolve.paths('esbuild'),
     plugins: [{ name: 'dsh-tavern-helper-host', setup(build) {
       build.onResolve({ filter: /^(@\/|@sillytavern\/)/ }, args => {
         if (hostModules.has(args.path) || args.path.startsWith('@sillytavern/')) return { path: join(project, 'src/helper-host.js') };

@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
-import { basename, extname, isAbsolute } from 'node:path';
+import { basename, extname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
@@ -159,14 +159,15 @@ export async function importBytes(store, sourceName, bytes) {
 }
 
 export async function importPath(store, path) {
-  if (typeof path !== 'string' || !isAbsolute(path)) throw new Error('请输入文件的完整路径');
+  if (typeof path !== 'string' || !path.trim()) throw new Error('请输入文件路径');
+  path = resolve(store.root, path);
   const info = await stat(path);
   if (!info.isFile() || info.size > MAX_BYTES) throw new Error('路径不是文件或文件超过 128 MB');
   return importBytes(store, basename(path), await readFile(path));
 }
 
 export async function importLegacyPrompts(store, tavernPath) {
-  const settings = json(await readFile(`${tavernPath}/data/default-user/settings.json`));
+  const settings = json(await readFile(resolve(store.root, tavernPath, 'data/default-user/settings.json')));
   const userscripts = settings.extension_settings?.__userscripts ?? {};
   const imported = [];
   // Only portable prompts cross this boundary; connections and credentials stay in Tavern.

@@ -38,8 +38,8 @@ npm install -g pnpm@11.21.0
 dsh_url=https://github.com
 dsh_url+=/3121455692atou-sudo
 dsh_url+=/dsh-tavern-mode
-dsh_url+=/releases/download/v0.4.0
-dsh_url+=/dsh-tavern-mode-0.4.0.tgz
+dsh_url+=/releases/download/v0.4.1
+dsh_url+=/dsh-tavern-mode-0.4.1.tgz
 dsh plugin --profile web add \
   --allow-build=esbuild "$dsh_url"
 ```
@@ -72,6 +72,8 @@ npx @deepseek-ai/dsh@0.1.5-rc.1 web
 ## 数据位置
 
 默认数据目录为 `~/.dsh/tavern/`，设置 `DSH_HOME` 时使用对应目录。
+
+插件文件按安装位置定位，数据文件按数据目录定位。`dataDir` 的相对路径以 dsh 数据目录为基准；本地导入的相对路径以酒馆数据目录为基准。资源和头像使用标识引用，移动数据目录后继续有效。
 
 | 内容 | 位置 |
 |---|---|

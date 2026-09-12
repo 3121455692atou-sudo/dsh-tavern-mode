@@ -106,7 +106,7 @@ export function createSettings(runtime) {
         <button className="tavern-save" onClick={() => action(saveSelection)}>保存选择</button>
         <PresetEditor id={selection.presetId} sessionId={sessionId} scope={scope} override={selection.presetId === (state?.presetId ?? (global ? data.selection : payload?.selection)?.presetId) ? (state?.presetOverride ?? (global ? data : payload)?.presetOverride) : undefined} saved={refresh} />
         <PresetEditor id={selection.toolPresetId} saved={refresh} />
-        <details><summary>读取本机酒馆配置</summary><label>SillyTavern 目录<input value={legacyPath} onChange={event => setLegacyPath(event.target.value)} /></label><button disabled={!legacyPath.trim()} onClick={() => action(async () => { await api('/import-legacy', { path: legacyPath.trim() }); await load(); }, '推进与填表预设已导入')}>读取本机酒馆的推进与填表预设</button></details>
+        <details><summary>读取本机酒馆配置</summary><label>SillyTavern 目录<input value={legacyPath} placeholder="相对酒馆数据目录的路径" onChange={event => setLegacyPath(event.target.value)} /></label><button disabled={!legacyPath.trim()} onClick={() => action(async () => { await api('/import-legacy', { path: legacyPath.trim() }); await load(); }, '推进与填表预设已导入')}>读取本机酒馆的推进与填表预设</button></details>
       </>}
       {page === 'agents' && <>
         <label>玩法<select aria-label="玩法" value={config.playMode ?? 'agent'} onChange={event => setConfig({ ...config, playMode: event.target.value })}><option value="agent">多 agent</option><option value="normal">普通</option></select></label>
