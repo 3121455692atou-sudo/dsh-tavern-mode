@@ -6,28 +6,53 @@
 
 ## 安装
 
-需要 Node.js 26.4 或更新版本；本版本在 DeepSeek Harness 0.1.5-rc.1 上验证。
+安装前需要：
 
-dsh 安装插件需要系统 PATH 中有 pnpm。没有安装时先执行：
+| 项目 | 要求 |
+|---|---|
+| Node.js | 26.4 或更新版本，包含 npm |
+| DeepSeek Harness 自身 | 已实测版本为 0.1.5-rc.1，命令 `dsh` 可用 |
+| pnpm | 已验证版本为 11.21.0，命令 `pnpm` 可用 |
+| 网络 | 能访问 GitHub Release 和 npm registry |
+| 使用方式 | dsh Web 版及浏览器；生成内容需配置模型提供方 |
+
+系统实测范围为 Linux x86_64。macOS 和 Windows 尚未完成插件运行实测。
+
+先查看现有版本：
 
 ```bash
-npm install -g pnpm@11.21.0
+node --version
+dsh --version
 pnpm --version
 ```
 
-然后复制下面完整的一行命令（包括网址）安装插件：
+缺少 pnpm 时安装：
 
 ```bash
-dsh plugin --profile web add --allow-build=esbuild https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz
+npm install -g pnpm@11.21.0
+```
+
+以下短行命令适用于 macOS/Linux 的 zsh 或 bash，整块复制即可，保留续行符 `\`：
+
+```bash
+dsh_url=https://github.com
+dsh_url+=/3121455692atou-sudo
+dsh_url+=/dsh-tavern-mode
+dsh_url+=/releases/download/v0.4.0
+dsh_url+=/dsh-tavern-mode-0.4.0.tgz
+dsh plugin --profile web add \
+  --allow-build=esbuild "$dsh_url"
 ```
 
 安装后重启 `dsh web`，在输入框上方的模式菜单选择「酒馆模式」，再导入自己的角色卡。发布包已经包含前端构建产物。安装参数 `--allow-build=esbuild` 用于安装脚本编译器，供 HTML 模块加载和酒馆助手更新使用。
 
-使用 npx 启动 dsh 时，对应安装命令为：
+使用 npx 启动 dsh 时，在上面的短行代码已设置 `dsh_url` 后执行：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add --allow-build=esbuild https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz
-npx @deepseek-ai/dsh web
+npx @deepseek-ai/dsh@0.1.5-rc.1 \
+  plugin --profile web add \
+  --allow-build=esbuild "$dsh_url"
+npx @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
 模型使用 dsh「设置 → 模型」中已经配置的提供方。插件的模型选项留空时跟随输入框中的模型。
