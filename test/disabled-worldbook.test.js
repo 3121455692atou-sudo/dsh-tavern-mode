@@ -1,3 +1,4 @@
+import { sourcePassages } from './helpers/tool-context.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildRoster, runTurn } from '../src/pipeline.js';
@@ -94,7 +95,7 @@ for (const options of [
     for (const request of requests.filter(request => ['memory', 'table'].includes(request.stage))) {
       const input = JSON.parse(request.messages.at(-1).content);
       assert.ok(!Object.hasOwn(input, 'completedStory'));
-      assert.equal(input.sourcePassages.filter(source => source.messageId === input.completedStoryMessageId).map(source => source.quote).join('\n'), '中性正文。');
+      assert.equal(sourcePassages(input).filter(source => source.messageId === input.completedStoryMessageId).map(source => source.quote).join('\n'), '中性正文。');
       assert.equal(JSON.stringify(input).split('中性正文。').length - 1, 1, 'the completed story is sent once, with its evidence ids');
     }
     const leaked = hits(requests, disabledMarkers);
@@ -109,7 +110,7 @@ test('buildRoster exposes only enabled worldbook content and ids', async () => {
   assert.equal(requests.length, 1);
   assert.equal(requests[0].stage, 'roster');
   const input = JSON.parse(requests[0].messages.at(-1).content);
-  assert.deepEqual(input.worldbook.map(entry => entry.id), ['card:3', 'card:4']);
+  assert.deepEqual([...input.staticWorldbook, ...input.worldbook].map(entry => entry.id), ['card:3', 'card:4']);
   assert.equal(hits(requests, enabledMarkers).length, 2);
   assert.deepEqual(hits(requests, disabledMarkers), []);
 });

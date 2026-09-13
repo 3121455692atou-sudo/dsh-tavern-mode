@@ -1,3 +1,4 @@
+import { sourcePassages } from './helpers/tool-context.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -103,7 +104,7 @@ test('A 500-episode turn bounds each agent input, distinguishes outdated knowled
     if (schema === PLAN) return { scene, beats: ['归还钥匙'], characterIntents: [], constraints: [] };
     if (schema === MEMORY || schema === TABLE_UPDATE) {
       const current = schema === MEMORY ? input.currentState : input.currentWorldState;
-      const update = { op: 'set', target: { id: current[0].id }, value: '林岚内袋', evidence: { sourceId: input.sourcePassages.at(-1).id } };
+      const update = { op: 'set', target: { id: current[0].id }, value: '林岚内袋', evidence: { sourceId: sourcePassages(input).at(-1).id } };
       if (schema === MEMORY) {
         counts.memory++; assert.ok(input.previousMemories.length <= 16);
         return { characterId: input.character.id, summary: '亲眼看见银钥匙交到林岚手里并收进内袋。', facts: [], relationships: [], openThreads: [], stateChanges: [update] };
@@ -158,9 +159,9 @@ test('A newly encountered named character gets its own first-turn memory and par
     if (stage === 'recall') { recallNames.push(input.character.name); return { characterId: input.character.id, memories: [], perspective: '', likelyPresent: true }; }
     if (schema === COMBINATION) return { scene, presentCharacterIds: input.characters.map(character => character.id), worldEntryIds: [], situation: '商量检修', characterViews: [], openThreads: [] };
     if (schema === PLAN) return { scene, beats: [], characterIntents: [], constraints: [] };
-    if (schema === TABLE_UPDATE) return { scene, operations: [], worldChanges: [], participatingCharacters: [], newCharacters: input.characters.some(character => character.name === '顾青') ? [] : [{ name: '顾青', profile: '成年音箱维修师。', evidence: { sourceId: input.sourcePassages.at(-1).id } }] };
+    if (schema === TABLE_UPDATE) return { scene, operations: [], worldChanges: [], participatingCharacters: [], newCharacters: input.characters.some(character => character.name === '顾青') ? [] : [{ name: '顾青', profile: '成年音箱维修师。', evidence: { sourceId: sourcePassages(input).at(-1).id } }] };
     if (schema === MEMORY) {
-      return { characterId: input.character.id, summary: '商定明早检修音箱。', facts: [], relationships: [], openThreads: [], stateChanges: input.currentState.length ? [] : [{ op: 'set', target: { subject: '顾青', key: '承诺' }, value: '明早检修音箱', evidence: { sourceId: input.sourcePassages.at(-1).id } }] };
+      return { characterId: input.character.id, summary: '商定明早检修音箱。', facts: [], relationships: [], openThreads: [], stateChanges: input.currentState.length ? [] : [{ op: 'set', target: { subject: '顾青', key: '承诺' }, value: '明早检修音箱', evidence: { sourceId: sourcePassages(input).at(-1).id } }] };
     }
     return story;
   };
@@ -182,7 +183,7 @@ test('Initial casting follows active worldbook entries, including the new input,
   ] } };
   await buildRoster({ state, card, text: '走到图书馆。', callModel: async ({ messages }) => {
     const input = JSON.parse(messages.at(-1).content);
-    assert.deepEqual(input.worldbook.map(entry => entry.content), ['顾青是图书馆值班员。']);
+    assert.deepEqual([...input.staticWorldbook, ...input.worldbook].map(entry => entry.content), ['顾青是图书馆值班员。']);
     return { characters: [] };
   } });
   const stages = [];

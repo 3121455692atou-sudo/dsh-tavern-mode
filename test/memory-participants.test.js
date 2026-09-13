@@ -1,3 +1,4 @@
+import { sourcePassages } from './helpers/tool-context.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -22,13 +23,13 @@ test('runTurn schedules the registered first participant from a solitary opening
     if (schema === COMBINATION) return { scene: state.scene, presentCharacterIds: [], worldEntryIds: [], situation: '开场无人。', characterViews: [], openThreads: [] };
     if (schema === PLAN) return { scene, beats: ['叶衡可能来接收地图。'], characterIntents: [], constraints: [] };
     if (schema === TABLE_UPDATE) {
-      const response = { scene, operations: [], worldChanges: [], newCharacters: [], participatingCharacters: [{ characterId: character.id, evidence: { sourceId: input.sourcePassages.at(-1).id } }] };
+      const response = { scene, operations: [], worldChanges: [], newCharacters: [], participatingCharacters: [{ characterId: character.id, evidence: { sourceId: sourcePassages(input).at(-1).id } }] };
       // The fixture emits the advertised tool fields, so the old contract reaches the missing-call assertion.
       return Object.fromEntries(Object.keys(schema.properties).map(key => [key, response[key]]));
     }
     if (schema === MEMORY) {
       memoryCalls.push(input.character.id);
-      return { characterId: input.character.id, summary: '接过访客归还的地图。', facts: ['已收回地图'], relationships: [], openThreads: [], stateChanges: [{ op: 'set', target: { subject: '地图', key: '保管人' }, value: character.name, evidence: { sourceId: input.sourcePassages.at(-1).id } }] };
+      return { characterId: input.character.id, summary: '接过访客归还的地图。', facts: ['已收回地图'], relationships: [], openThreads: [], stateChanges: [{ op: 'set', target: { subject: '地图', key: '保管人' }, value: character.name, evidence: { sourceId: sourcePassages(input).at(-1).id } }] };
     }
     assert.equal(stage, 'write');
     return story;
@@ -78,7 +79,7 @@ function ensemble() {
     if (schema === COMBINATION) return { scene, presentCharacterIds: ['host', 'planned'], worldEntryIds: [], situation: '归还地图。', characterViews: [], openThreads: [] };
     if (schema === PLAN) return { scene, beats: ['轮值档案员可能加入；杜禾可能来收地图。'], characterIntents: [{ characterId: 'planned', intent: '收地图', knowledgeBoundary: '尚不知情' }], constraints: [] };
     if (stage === 'write') return paragraphs.join('\n');
-    const sources = input.sourcePassages.filter(source => source.messageId === input.sourcePassages.at(-1).messageId);
+    const sources = sourcePassages(input).filter(source => source.messageId === sourcePassages(input).at(-1).messageId);
     if (schema === TABLE_UPDATE) {
       assert.equal(input.completedStoryMessageId, sources[0].messageId);
       assert.deepEqual(input.characters.map(character => character.enabled), [true, true, true, true, true, false]);
@@ -124,7 +125,7 @@ test('Continue uses only its new assistant floor for participant evidence and me
   const result = await runTurn({ ...fixture, trigger: 'continue', text: '' });
   assert.equal(result.messages.length, 2);
   for (const call of fixture.calls.filter(call => call.stage === 'memory')) {
-    assert.ok(call.input.sourcePassages.every(source => source.messageId === result.messages.at(-1).id));
+    assert.ok(sourcePassages(call.input).every(source => source.messageId === result.messages.at(-1).id));
     const memory = result.memories[call.input.character.id].at(-1);
     if (call.input.character.id !== 'planned') assert.deepEqual(memory.sourceMessageIds, [result.messages.at(-1).id]);
   }
@@ -180,10 +181,10 @@ test('Invalid participants, duplicate identities and supplemental memory failure
     ['disabled participant', 'table', (value) => { value.participatingCharacters[1].characterId = 'disabled'; }, /正文参与角色.*不存在/],
     ['duplicate participant', 'table', (value) => { value.participatingCharacters.push(value.participatingCharacters[0]); }, /正文参与角色.*重复/],
     ['invalid source', 'table', (value) => { value.participatingCharacters[1].evidence.sourceId = 'source-999'; }, /sourceId.*不存在/],
-    ['user plan source', 'table', (value, input) => { value.participatingCharacters[1].evidence.sourceId = input.sourcePassages[0].id; }, /messageId.*不属于本轮/],
+    ['user plan source', 'table', (value, input) => { value.participatingCharacters[1].evidence.sourceId = sourcePassages(input)[0].id; }, /messageId.*不属于本轮/],
     ['existing identity in newCharacters', 'table', (value) => { value.newCharacters[0].name = 'Elian'; }, /新角色名称.*重复/],
     ['duplicate new character', 'table', (value) => { value.newCharacters.push(value.newCharacters[0]); }, /新角色名称.*重复/],
-    ['new character from a plan', 'table', (value, input) => { value.newCharacters[0].evidence.sourceId = input.sourcePassages[0].id; }, /messageId.*不属于本轮/],
+    ['new character from a plan', 'table', (value, input) => { value.newCharacters[0].evidence.sourceId = sourcePassages(input)[0].id; }, /messageId.*不属于本轮/],
     ['wrong memory owner', 'memory', (value, input) => { if (input.character.id === 'arrival') value.characterId = 'host'; }, /新记忆的角色归属错误/],
     ['wrong state owner', 'memory', (value, input) => { if (input.character.id === 'arrival') value.stateChanges[0].target = { id: 'host-private-state' }; }, /target.id.*不是当前状态/],
     ['invalid memory source', 'memory', (value, input) => { if (input.character.id === 'arrival') value.stateChanges[0].evidence.sourceId = 'source-999'; }, /sourceId.*不存在/],

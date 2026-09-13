@@ -1,3 +1,4 @@
+import { expandedMessages } from './helpers/tool-context.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
@@ -41,15 +42,14 @@ async function capture(label, args) {
   } });
   assert.deepEqual({ data: args.data, worldbook: args.worldbook, advanceWorldbooks: args.advanceWorldbooks, card: args.card, tables: args.state.tables }, before);
   for (const request of requests) {
-    assert.deepEqual(request.messages.map(message => message.role), ['system', 'system', 'user', 'assistant']);
     assert.equal(request.messages[0].content, 'LITERAL <task>KEEP_TEMPLATE</task>');
-    assert.equal(request.messages.at(-1).content, 'LITERAL_TAIL');
+    assert.ok(request.messages.some(message => message.role === 'assistant' && message.content === 'LITERAL_TAIL'));
     assert.ok(!JSON.stringify(request.messages).includes('DISABLED_PROMPT'));
   }
   return { requests, result };
 }
 function field(request, name) {
-  const text = request.messages.find(message => message.role === 'user').content;
+  const text = expandedMessages(request.messages).find(message => message.role === 'user').content;
   const start = text.indexOf(`<${name}>`) + name.length + 2;
   return text.slice(start, text.indexOf(`</${name}>`, start));
 }

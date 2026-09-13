@@ -1,3 +1,4 @@
+import { expandedMessages } from './helpers/tool-context.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -69,7 +70,7 @@ function model(requests, label) {
     throw new Error(`Unexpected stage ${stage}`);
   };
 }
-const body = (requests, label) => requests.find(request => request.label === label)?.messages.find(message => message.content.startsWith('<books>')).content;
+const body = (requests, label) => expandedMessages(requests.find(request => request.label === label)?.messages).find(message => message.content.startsWith('<books>'))?.content;
 async function turn(t, args) {
   const before = structuredClone(args.state), assets = await sessionAssets(args.store, args.state), requests = [];
   const result = await runTurn({ state: args.state, ...assets, text: '甲和乙开始整理资料。', callModel: model(requests, t.name) });

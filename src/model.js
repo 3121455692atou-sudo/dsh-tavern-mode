@@ -28,7 +28,13 @@ export function makeModelCaller(llm) {
       signal?.throwIfAborted();
       requestCount++;
       const requestMessages = messages.map(toMessage);
-      if (contract) requestMessages.push(createSystemMessage(contract + correction, 'dsh-tavern-mode'));
+      if (contract) {
+        if (messages[0]?.role === 'system') requestMessages[0] = createSystemMessage(`${messages[0].content}\n\n${contract}`, 'dsh-tavern-mode');
+        else requestMessages.unshift(createSystemMessage(contract, 'dsh-tavern-mode'));
+      }
+      // A rejected result changes per attempt. Keep it at the end so a retry can
+      // reuse the complete original request prefix, including the fixed schema.
+      if (correction) requestMessages.push(createSystemMessage(correction, 'dsh-tavern-mode'));
       const options = {
         provider: agent.provider, model: agent.model, messages: requestMessages, signal,
         ...(reasoningEffort ? { reasoningEffort } : {}),

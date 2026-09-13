@@ -1,13 +1,13 @@
-import { staticText, stableFirst } from './prompt-context.js';
+import { staticEntry, stableFirst } from './prompt-context.js';
 import { ProtocolError, validateProtocol } from './contracts.js';
 import { describeTables } from './tables.js';
 import { environmentFor } from './prompts.js';
-import { renderTemplates } from './templates.js';
+import { advanceMessages } from './advance-context.js';
 import { activateWorldbook } from './worldbook.js';
 import { effectiveMessages } from './memory-state.js';
 import { summaryIndex } from './summary-index.js';
 import { selectAdvanceWorldbooks } from './session-assets.js';
-import { worldbookDirectory, advanceResultView } from './tool-context.js';
+import { worldbookDirectory, orderedToolMessages, advanceResultView } from './tool-context.js';
 
 const names = value => [...new Set(String(value ?? '').split(',').map(name => name.trim()).filter(Boolean))];
 const block = (name, values) => `<${name}>${(values ?? []).join('\n\n')}</${name}>`;
@@ -108,17 +108,21 @@ export async function runAdvancePreset({ state, card, data, worldbook, advanceWo
       if (withPlan) { schema.properties.plan = planRequest.schema; schema.required.push('plan'); }
       const values = { ...replacements, '$1': summaryOnly ? JSON.stringify(worldbookDirectory(stableFirst(active))) : stableFirst(active).map(entry => entry.content).join('\n\n'), '$7': contextFor(options) };
       const source = (task.promptGroup ?? []).filter(prompt => prompt.enabled !== false && typeof prompt.content === 'string');
-      const rendered = await renderTemplates({ env: environmentFor(state, card), tables, texts: source.map(prompt => ({ text: replace(prompt.content, values, relay, true, options) })) }, { signal, timeout: state.config.templateTimeout });
-      let messages = source.map((prompt, index) => ({ cacheStatic: staticText(prompt.content) && !/(?<!\\)\$[15678]|\{\{/.test(prompt.content), role: /^(ai|assistant)$/i.test(prompt.role) ? 'assistant' : String(prompt.role ?? 'user').toLowerCase(), content: rendered.texts[index] })).filter(prompt => prompt.content.trim());
+      const bookParts = { fixed: filterAdvanceContext(active.filter(staticEntry).map(entry => entry.content).join('\n\n'), options), dynamic: filterAdvanceContext(active.filter(entry => !staticEntry(entry)).map(entry => entry.content).join('\n\n'), options) };
+      let messages = await advanceMessages({ source, values,
+        bookParts: !summaryOnly && Object.values(bookParts).filter(Boolean).join('\n\n') === filterAdvanceContext(values.$1, options) ? bookParts : null,
+        replace: (content, substitutions, references) => replace(content, substitutions, references, true, options),
+        relay: Object.fromEntries([...declared].map(name => [name, lookup(relay, name) ?? lookup(prior?.tags ?? {}, name) ?? []])),
+        env: environmentFor(state, card), tables, signal, timeout: state.config.templateTimeout });
       if (summaryRecords.length) messages.push({ role: 'system', content: JSON.stringify({ summaryRecords }) });
       const instruction = tagNames.length
         ? `按任务指令生成内容。输出协议为 JSON 对象 sections，键为 ${tagNames.join('、')}；每个值是原任务中对应标签内部的完整文本，保留其嵌套格式。所有字段都必须提供。原任务的 XML 外层标签由程序按字段名添加。`
         : '按任务指令生成内容，将完整结果放在 JSON 字段 content 中。';
       messages.push({ role: 'system', content: instruction, cacheStatic: true });
-      if (recallTag) messages.push({ role: 'system', content: `纪要选择使用 JSON 字段 selectedRecords，格式为 [{"tableId":"索引中的表标识","recordIds":["该表 recordIdColumn 对应的精确字符串值"]}]。仅选择本轮相关的已有记录，完整纪要由程序按表与编码回取。sections.${recallTag} 保留对应标签内的文本，程序仅按 selectedRecords 决定选择。无索引或无相关记录时 selectedRecords 为 []，sections.${recallTag} 可为 ""；仅此空召回结果豁免最低长度，保持真实空选择。` });
+      if (recallTag) messages.push({ role: 'system', content: `纪要选择使用 JSON 字段 selectedRecords，格式为 [{"tableId":"索引中的表标识","recordIds":["该表 recordIdColumn 对应的精确字符串值"]}]。仅选择本轮相关的已有记录，完整纪要由程序按表与编码回取。sections.${recallTag} 保留对应标签内的文本，程序仅按 selectedRecords 决定选择。无索引或无相关记录时 selectedRecords 为 []，sections.${recallTag} 可为 ""；仅此空召回结果豁免最低长度，保持真实空选择。`, cacheStatic: true });
       if (summaryOnly) messages.push({ role: 'system', content: '本任务只选择已有纪要。世界资料以条目目录提供，用于理解专名；根据纪要索引、本轮输入与已有正文选择记录，不需要重述世界资料。', cacheStatic: true });
       if (withPlan) {
-        messages.unshift(...(planRequest.messages ?? []).map(message => ({ ...message, cacheStatic: staticText(message.content) })));
+        messages.unshift(...(planRequest.messages ?? []).map(message => ({ ...message, cacheStatic: true })));
         messages.push({ role: 'system', content: `${planRequest.instruction}\n在同一次结果中额外返回 plan，按给定结构填写本轮推进计划，并与本任务的 sections/content 保持一致。已有任务结果是参考材料，计划不是已发生事实。`, cacheStatic: true });
         const included = new Set(source.some(prompt => /(?<!\\)\$1\b/.test(prompt.content)) ? active.map(entry => entry.id) : []);
         const missing = planRequest.worldbook.filter(entry => !included.has(entry.id));
@@ -137,8 +141,7 @@ export async function runAdvancePreset({ state, card, data, worldbook, advanceWo
         const length = contentOf(output).length;
         if (!emptyRecall && length < minimum) throw new ProtocolError(`推进任务「${task.name}」内容长度不足（${length}/${minimum}）`);
       };
-      const fixed = message => message.role === 'system' && message.cacheStatic;
-      messages = [...messages.filter(fixed), ...messages.filter(message => !fixed(message))].map(({ role, content }) => ({ role, content }));
+      messages = orderedToolMessages(messages);
       const agent = state.config.agents.advance, label = task.name || '推进子任务', usage = [], startedAt = Date.now();
       emit({ type: 'stage', stage: 'advance', label, status: 'running', provider: agent.provider, model: agent.model });
       const output = await callModel({ stage: 'advance', label, agent, messages, schema, signal, validate, retries: state.config.protocolRetries, onUsage: value => usage.push(value) });
