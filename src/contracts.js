@@ -85,6 +85,7 @@ export const ROLE_INSTRUCTIONS = {
   roster: '从提供的角色卡和世界书建立角色目录。每个实际角色独立成项，记录名称、基础设定和描述该角色的世界书 id。不要把组织、地点或概念列为角色。只能引用提供的世界书 id。',
 };
 for (const stage of ['recall', 'combine', 'memory', 'table']) ROLE_INSTRUCTIONS[stage] += ' 当前状态只列出本轮相关项，未列出的项仍保存在完整状态记录中。';
+for (const stage of ['memory', 'table']) ROLE_INSTRUCTIONS[stage] += ' 已完成正文按原文顺序保存在 sourcePassages 中 messageId 等于 completedStoryMessageId 的段落里，不另行重复全文。';
 ROLE_INSTRUCTIONS.table += ' templates 提供表结构、列名、约束和说明；tableRows 提供当前行，按 tableId 对应 templates 的 id。';
 ROLE_INSTRUCTIONS.combine += ' 记忆中没有记录不代表当下无法观察或交流；尚未告知只表示既有信息差，角色意图仍须依据其设定与当前情境判断。';
 ROLE_INSTRUCTIONS.advance += ' 随情节节点更新角色知识：角色能够听懂本轮已经说出的信息，并通过观察确认变化，不能把开场时的未知固定到整轮结束。';

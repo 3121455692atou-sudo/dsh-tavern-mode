@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runAdvancePreset } from '../src/advance.js';
-import { defaultConfig } from '../src/contracts.js';
+import { PLAN, defaultConfig } from '../src/contracts.js';
 import { makeModelCaller } from '../src/model.js';
+import { normalizeWorldbook } from '../src/worldbook.js';
 
 function fixture(task = {}, profile = {}) {
   return {
@@ -20,6 +21,60 @@ test('Imported minimum length measures reconstructed tagged output, not the shor
   }
   await assert.rejects(runAdvancePreset({ ...fixture({ extractTags: '' }), callModel: async () => ({ content: 'ABCDEF' }) }), /内容长度不足/);
   await assert.rejects(runAdvancePreset({ ...fixture({ extractTags: 'index' }), callModel: async () => ({ sections: { index: '' } }) }), /fewer than 1/);
+});
+
+test('Summary selection receives the directory while the subsequent plot task keeps full activated lore', async () => {
+  const args = fixture({ promptGroup: [{ role: 'USER', content: '$1\n$5\n$7\n$8' }] });
+  args.worldbook = normalizeWorldbook({ entries: [{ id: 1, constant: true, keys: ['登记'], comment: '登记处<!-- editor metadata -->', content: 'FULL_WORLD_DETAIL' }] });
+  args.data.plotTasks.push({ id: 'plot', name: '推进', extractTags: 'plot', promptGroup: [{ role: 'USER', content: '$1' }] });
+  await runAdvancePreset({ ...args, callModel: async ({ label, messages }) => {
+    const input = JSON.stringify(messages);
+    if (label === '索引') {
+      assert.match(input, /card:1/); assert.match(input, /登记处/);
+      assert.match(input, /先前已完成登记/); assert.match(input, /查看登记记录/);
+      assert.doesNotMatch(input, /FULL_WORLD_DETAIL|editor metadata/);
+      return { sections: { recall: '' }, selectedRecords: [] };
+    }
+    assert.match(input, /FULL_WORLD_DETAIL/);
+    return { sections: { plot: '下一步查询登记档案。' } };
+  } });
+});
+
+test('Final plot task returns a validated plan without changing the writer injection or duplicating lore', async () => {
+  const args = fixture({ extractTags: 'plot', promptGroup: [{ role: 'USER', content: '$1\n$8' }] });
+  args.worldbook = normalizeWorldbook({ entries: [{ id: 1, constant: true, keys: [], content: 'UNIQUE_WORLD_DETAIL' }] });
+  const section = { sections: { plot: '下一步查询登记档案。' } };
+  const expected = await runAdvancePreset({ ...args, state: structuredClone(args.state), callModel: async () => section });
+  const plan = { scene: { location: '登记处', time: '上午', summary: '查询档案。' }, beats: ['查阅目录'], characterIntents: [], constraints: [] };
+  const planRequest = { schema: PLAN, input: { userInput: args.text }, worldbook: args.worldbook, instruction: '填写计划。', validate(value) { assert.deepEqual(value, plan); } };
+  let calls = 0;
+  const result = await runAdvancePreset({ ...args, planRequest, callModel: async ({ messages, schema }) => {
+    calls++;
+    assert.ok(schema.required.includes('plan'));
+    assert.equal(JSON.stringify(messages).split('UNIQUE_WORLD_DETAIL').length - 1, 1);
+    return { ...section, plan };
+  } });
+  assert.equal(calls, 1); assert.deepEqual(result.plan, plan);
+  assert.deepEqual(result.results, expected.results);
+  assert.equal(result.injection, expected.injection);
+  assert.equal(result.injection, '<plot>下一步查询登记档案。</plot>');
+  assert.deepEqual(result.results[0].sections, section.sections);
+  assert.ok(!result.results[0].content.includes('characterIntents'));
+  await assert.rejects(runAdvancePreset({ ...args, planRequest, callModel: async () => section }), /plan/);
+  await assert.rejects(runAdvancePreset({ ...args, planRequest, callModel: async () => ({ ...section, plan: {} }) }), /scene/);
+  let separate = false;
+  await runAdvancePreset({ ...args, planRequest: { ...planRequest, worldbook: [{ id: 'excluded', content: 'EXCLUDED_WORLD' }] }, callModel: async ({ schema, messages }) => {
+    separate = !schema.properties.plan;
+    assert.doesNotMatch(JSON.stringify(messages), /EXCLUDED_WORLD/);
+    return section;
+  } });
+  assert.ok(separate, 'excluded planner sources keep the ordinary planner separate');
+  const selected = normalizeWorldbook({ entries: [{ id: 2, keys: ['未提及的人物'], content: 'COMBINATION_SELECTED_DETAIL' }] });
+  await runAdvancePreset({ ...args, worldbook: [...args.worldbook, ...selected], planRequest: { ...planRequest, worldbook: [...args.worldbook, ...selected] }, callModel: async ({ messages, schema }) => {
+    assert.ok(schema.properties.plan);
+    assert.equal(JSON.stringify(messages).split('COMBINATION_SELECTED_DETAIL').length - 1, 1);
+    return { ...section, plan };
+  } });
 });
 
 test('Advance task context zero excludes history and missing task minimum inherits the profile', async () => {

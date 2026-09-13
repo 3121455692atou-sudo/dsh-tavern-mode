@@ -42,7 +42,7 @@ function captureModel(requests, worldEntryIds = ['card:3', 'card:4']) {
     if (stage === 'recall' && schema === SEARCH_QUERY) return { queries: ['中性查询'] };
     if (stage === 'recall') return { characterId: 'actor-a', memories: [], perspective: '中性视角。', likelyPresent: true };
     if (stage === 'combine') return { scene, presentCharacterIds: ['actor-a'], worldEntryIds, situation: '中性情形。', characterViews: [{ characterId: 'actor-a', knowledge: '中性认知。', intent: '中性意图。' }], openThreads: [] };
-    if (stage === 'advance' && schema !== PLAN) return { sections: { plan: '中性子任务结果。' } };
+    if (stage === 'advance' && schema !== PLAN) return { sections: { plan: '中性子任务结果。' }, ...(schema.properties.plan ? { plan: { scene, beats: ['中性节拍。'], characterIntents: [], constraints: [] } } : {}) };
     if (stage === 'advance') return { scene, beats: ['中性节拍。'], characterIntents: [], constraints: [] };
     if (stage === 'table') return { operations: [], scene, worldChanges: [], participatingCharacters: [], newCharacters: [] };
     if (stage === 'memory') return { characterId: 'actor-a', summary: '中性更新。', facts: [], relationships: [], openThreads: [], stateChanges: [] };
@@ -81,7 +81,7 @@ for (const options of [
     const worldEntryIds = [`${prefix}:3`, `${prefix}:4`], requests = [];
     const result = await runTurn({ state, card: fixtureCard, extraBooks, legacy, callModel: captureModel(requests, worldEntryIds), text: '林岚，中性输入。' });
 
-    assert.equal(requests.length, options.search ? 8 : 7);
+    assert.equal(requests.length, options.search ? 7 : 6);
     assert.deepEqual(new Set(requests.map(request => request.stage)), new Set(['recall', 'combine', 'advance', 'write', 'memory', 'table']));
     assert.equal(requests.filter(request => request.search).length, options.search ? 1 : 0);
     for (const request of requests.filter(request => ['recall', 'combine', 'advance', 'write'].includes(request.stage))) {
@@ -91,6 +91,12 @@ for (const options of [
     assert.deepEqual(combinationInput.worldbookDirectory.map(entry => entry.id), worldEntryIds);
     assert.deepEqual({ state, fixtureCard, extraBooks }, original, '完整输入资料不能被过滤或修改');
     assert.equal(result.messages.at(-1).content, '中性正文。');
+    for (const request of requests.filter(request => ['memory', 'table'].includes(request.stage))) {
+      const input = JSON.parse(request.messages.at(-1).content);
+      assert.ok(!Object.hasOwn(input, 'completedStory'));
+      assert.equal(input.sourcePassages.filter(source => source.messageId === input.completedStoryMessageId).map(source => source.quote).join('\n'), '中性正文。');
+      assert.equal(JSON.stringify(input).split('中性正文。').length - 1, 1, 'the completed story is sent once, with its evidence ids');
+    }
     const leaked = hits(requests, disabledMarkers);
     t.diagnostic(JSON.stringify({ capturedRequests: requests.map(({ stage, label, search }) => ({ stage, label, search })), disabledHits: leaked }));
     assert.deepEqual(leaked, [], '停用条目不能直接进入任何模型请求');

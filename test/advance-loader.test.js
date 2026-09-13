@@ -52,7 +52,7 @@ function model(requests, label) {
   return async ({ stage, messages, schema, label: taskLabel }) => {
     const request = { case: label, stage, label: taskLabel, messages: structuredClone(messages), schema };
     requests.push(request); captures.push(request);
-    if (stage === 'advance' && schema !== PLAN) return { sections: { result: '中性推进结果。' } };
+    if (stage === 'advance' && schema !== PLAN) return { sections: { result: '中性推进结果。' }, ...(schema.properties.plan ? { plan: { scene, beats: ['整理资料。'], characterIntents: [], constraints: [] } } : {}) };
     if (stage === 'advance') return { scene, beats: ['整理资料。'], characterIntents: [], constraints: [] };
     if (stage === 'combine') return { scene, presentCharacterIds: ['actor-0', 'actor-1'], worldEntryIds: ['card:0'],
       situation: '开始整理资料。', characterViews: [], openThreads: [] };

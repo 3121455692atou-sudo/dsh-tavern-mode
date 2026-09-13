@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { worldbookTitle, worldbookDirectory, orderedToolInput, advanceResultView } from './tool-context.js';
 import { factView, episodeView, recallView, trimHistory, stableFirst, staticText } from './prompt-context.js';
 import { recordTableChanges } from './table-history.js';
 import { INTERACTION, repairInteraction } from './interaction.js';
@@ -42,7 +43,7 @@ export async function buildRoster({ state, card, extraBooks, callModel, text = '
   const rosterPreset = state.config.agents.combine?.presetId ? agentPresets[state.config.agents.combine.presetId] ?? toolPreset : toolPreset;
   const result = await callModel({ stage: 'roster', label: '识别角色', agent: state.config.agents.combine, schema: ROSTER, retries: state.config.protocolRetries, signal, validate: checkRoster, messages: [
     { role: 'system', content: ROLE_INSTRUCTIONS.roster }, ...toolPresetMessages(rosterPreset),
-    { role: 'user', content: JSON.stringify({ card: { name: card.name, description: card.description, personality: card.personality, scenario: card.scenario, firstMessage: card.first_mes }, userInput: text, worldbook: relevant.map(e => ({ id: e.id, title: e.comment, keys: e.keys, content: e.content })) }) },
+    { role: 'user', content: JSON.stringify({ card: { name: card.name, description: card.description, personality: card.personality, scenario: card.scenario, firstMessage: card.first_mes }, userInput: text, worldbook: relevant.map(e => ({ id: e.id, title: worldbookTitle(e), keys: e.keys, content: e.content })) }) },
   ] });
   checkRoster(result);
   const names = new Set();
@@ -76,7 +77,7 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
     emit({ type: 'stage', stage, label, status: 'running', provider: agent.provider, model: agent.model });
     const startedAt = Date.now();
     const usage = [];
-    const messages = [{ role: 'system', content: [ROLE_INSTRUCTIONS[stage], agent.prompt].filter(Boolean).join('\n\n') }, ...toolPresetMessages(presetFor(stage)), ...extras.filter(message => message.cacheStatic !== false && staticText(message.content)).map(({ role, content }) => ({ role, content })), { role: 'user', content: JSON.stringify(input) }, ...extras.filter(message => message.cacheStatic === false || !staticText(message.content)).map(({ role, content }) => ({ role, content }))];
+    const messages = [...toolPresetMessages(presetFor(stage)), { role: 'system', content: [ROLE_INSTRUCTIONS[stage], agent.prompt].filter(Boolean).join('\n\n') }, ...extras.filter(message => message.cacheStatic !== false && staticText(message.content)).map(({ role, content }) => ({ role, content })), { role: 'user', content: JSON.stringify(orderedToolInput(input)) }, ...extras.filter(message => message.cacheStatic === false || !staticText(message.content)).map(({ role, content }) => ({ role, content }))];
     const result = await callModel({ stage, label, agent, messages, schema, signal: runSignal, retries: config.protocolRetries, onUsage: value => usage.push(value), validate });
     validateProtocol(result, schema);
     validate?.(result);
@@ -139,14 +140,19 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
     } else {
       combined = await stageCall('combine', {
         characters: actors.map(c => ({ id: c.id, name: c.name, profile: c.profile })),
-        worldbookDirectory: worldbook.filter(e => e.enabled && e.content.trim()).map(e => ({ id: e.id, title: e.comment, keys: e.keys })),
-        activeWorldbook: stableFirst(activated.entries).map(e => ({ id: e.id, title: e.comment, content: e.content })),
+        worldbookDirectory: worldbookDirectory(worldbook.filter(e => e.enabled && e.content.trim())),
+        activeWorldbook: stableFirst(activated.entries).map(e => ({ id: e.id, title: worldbookTitle(e), content: e.content })),
         ...publicScene, recalls: recalls.map(recallView), worldState: worldState.map(fact => factView(fact)), worldEpisodes: worldEpisodes.map(episode => episodeView(episode)),
         tables: currentTables,
       }, COMBINATION, '场景组合', [], undefined, checkCombination);
       const advanceDirectory = advanceWorldbooks ? await prepareAdvanceWorldbooks(state, card, advanceWorldbooks, runSignal) : undefined;
-      advance = await runAdvancePreset({ state, card, data: legacy, worldbook, advanceWorldbooks: advanceDirectory, text, callModel, signal: runSignal, emit, trace, mapConcurrent });
-      plan = await stageCall('advance', { worldbook: stableFirst(worldbook.filter(e => e.enabled && combined.worldEntryIds.includes(e.id))).map(e => ({ id: e.id, content: e.content })), ...publicScene, combination: combined, recalls: recalls.map(recallView), worldState: worldState.map(fact => factView(fact)), worldEpisodes: worldEpisodes.map(episode => episodeView(episode)), tables: currentTables, summaryRecords: advance?.summaryRecords ?? [], ...(advance ? { advanceTasks: advance.results } : {}) }, PLAN, '剧情推进', advance ? [] : legacyPromptMessages(legacy, 'advance', replacements), undefined, plan => assertIds(plan.characterIntents.map(c => c.characterId), combined.presentCharacterIds, '推进计划角色'));
+      const planWorldbook = stableFirst(worldbook.filter(e => e.enabled && combined.worldEntryIds.includes(e.id)));
+      const planInput = { ...publicScene, combination: combined, recalls: recalls.map(recallView), worldState: worldState.map(fact => factView(fact)), worldEpisodes: worldEpisodes.map(episode => episodeView(episode)), tables: currentTables };
+      const checkPlan = value => assertIds(value.characterIntents.map(c => c.characterId), combined.presentCharacterIds, '推进计划角色');
+      advance = await runAdvancePreset({ state, card, data: legacy, worldbook, advanceWorldbooks: advanceDirectory, text, callModel, signal: runSignal, emit, trace, mapConcurrent,
+        planRequest: { schema: PLAN, input: planInput, worldbook: planWorldbook, messages: toolPresetMessages(presetFor('advance')), instruction: [ROLE_INSTRUCTIONS.advance, config.agents.advance.prompt].filter(Boolean).join('\n\n'), validate: checkPlan },
+      });
+      plan = advance?.plan ?? await stageCall('advance', { worldbook: planWorldbook.map(e => ({ id: e.id, content: e.content })), ...planInput, summaryRecords: advance?.summaryRecords ?? [], ...(advance ? { advanceTasks: advance.results.map(advanceResultView) } : {}) }, PLAN, '剧情推进', advance ? [] : legacyPromptMessages(legacy, 'advance', replacements), undefined, checkPlan);
     }
     emit({ type: 'plan', combination: combined, plan });
     }
@@ -229,7 +235,7 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
         if (memory.characterId !== character.id) throw new ProtocolError('新记忆的角色归属错误');
         validateStateChanges(resolveStateChanges(memory.stateChanges, currentState, sourcePassages), currentState, sourceMessages);
       };
-      const memory = await stageCall('memory', { character, previousMemories: previousMemories.map(memory => episodeView(memory)), currentState: currentState.map(fact => factView(fact, true)), previousScene: state.scene, userInput: text, completedStory: assistant.content, sourcePassages }, MEMORY, character.name, [], character.memoryModel, check);
+      const memory = await stageCall('memory', { character, previousMemories: previousMemories.map(memory => episodeView(memory)), currentState: currentState.map(fact => factView(fact, true)), previousScene: state.scene, userInput: text, completedStoryMessageId: assistant.id, sourcePassages }, MEMORY, character.name, [], character.memoryModel, check);
       return { type: 'memory', memory: { ...memory, stateChanges: resolveStateChanges(memory.stateChanges, currentState, sourcePassages) } };
     };
     const checkTables = tables => {
@@ -253,7 +259,7 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
         templates: tableDescriptions.map(({ rows, ...template }) => template),
         characters: state.characters.map(({ id, name, profile, enabled }) => ({ id, name, profile, enabled: enabled !== false })),
         tableRows: tableDescriptions.map(({ id, rows }) => ({ tableId: id, rows })),
-        previousScene: state.scene, userInput: text, completedStory: assistant.content, completedStoryMessageId: assistant.id,
+        previousScene: state.scene, userInput: text, completedStoryMessageId: assistant.id,
         currentWorldState: worldState.map(fact => factView(fact, true)), currentWorldStateCount: allWorldState.length, sourcePassages,
       }, TABLE_UPDATE, '表格更新', [...legacyPromptMessages(legacy, 'table', replacements), ...tableFillEntries(worldbook).map(entry => ({ role: 'system', content: entry.content, cacheStatic: entry.cacheStatic }))], undefined, checkTables);
       return { type: 'table', tables: { ...tables, worldChanges: resolveStateChanges(tables.worldChanges, allWorldState, sourcePassages), newCharacters: resolveRecords(tables.newCharacters) } };

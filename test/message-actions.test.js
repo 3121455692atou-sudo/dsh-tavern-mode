@@ -6,6 +6,19 @@ import { join } from 'node:path';
 import { apply } from '../src/index.js';
 import { Store } from '../src/storage.js';
 import { defaultConfig } from '../src/contracts.js';
+import { messageAction } from '../src/message-actions.js';
+
+test('Pasting reasoning into the body preserves reasoning and updates the active swipe', async () => {
+  const reasoning = '<think>检查目录。</think>\n<story_plot>管理员递来档案。</story_plot>';
+  const state = { messages: [{ id: 'a', role: 'assistant', content: '旧正文', extra: { reasoning } }],
+    helperChat: [{ tavernMessageId: 'a', mes: '旧正文', swipe_id: 1, swipes: ['其他版本', '旧正文'] }],
+    memories: {}, tables: {}, tableHistory: { base: {}, scene: {}, events: [] } };
+  await messageAction({}, state, [], { action: 'edit', messageId: 'a', text: '管理员递来档案。' });
+  assert.equal(state.messages[0].content, '管理员递来档案。');
+  assert.equal(state.messages[0].extra.reasoning, reasoning);
+  assert.deepEqual(state.helperChat[0].swipes, ['其他版本', '管理员递来档案。']);
+  assert.equal(state.helperChat[0].mes, '管理员递来档案。');
+});
 
 test('Message edits persist and reroll restores the turn baseline without old memories or duplicate native messages', async t => {
   const root = await mkdtemp(join(tmpdir(), 'tavern-message-actions-')), disposers=[]; let handler;

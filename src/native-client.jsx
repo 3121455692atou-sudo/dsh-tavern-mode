@@ -41,6 +41,7 @@ export function apply(ctx) {
     .tavern-message-actions button{font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);background:transparent;border:0;border-radius:5px;padding:4px;cursor:pointer}
     .tavern-message-actions button:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}.tavern-message-actions button:disabled{opacity:.5;cursor:default}
     .tavern-message-editor{box-sizing:border-box;width:100%;min-height:160px;height:320px;max-height:60dvh;resize:vertical;padding:12px;font:inherit;color:inherit;background:var(--dsw-alias-fill-tsp-secondary);border:1px solid var(--dsw-alias-border-l2);border-radius:8px}
+    .tavern-thinking{margin:0 0 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:10px 12px}.tavern-thinking summary{cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:13px}.tavern-thinking-text{height:260px;white-space:pre-wrap;user-select:text}.tavern-thinking .tavern-message-actions{margin:6px 0}
     .tavern-library-title h2{margin:0;font-size:21px}.tavern-library-title p{margin:6px 0 20px}
     .tavern-settings .tavern-import-drop{display:grid;justify-items:center;gap:5px;width:100%;padding:20px;border-style:dashed;border-radius:12px;background:var(--dsw-alias-fill-tsp-secondary)}
     .tavern-import-plus{font-size:26px;line-height:1.2;color:var(--dsw-alias-label-tertiary)}
@@ -136,7 +137,7 @@ export function apply(ctx) {
       const index = payload.state.messages.findIndex(message => message.nativeMessageId === props.node.data.finalNode?.messageId);
       const messageIndex = index < 0 ? payload.state.messages.findLastIndex(message => message.content === text) : index;
       if (messageIndex < 0) return <Original {...props} />;
-      return <MessageActions sessionId={props.sessionId} payload={payload} message={payload.state.messages[messageIndex]} nativeMessageId={props.node.data.finalNode?.messageId} role="assistant" text={text}>{renderText(text, payload, messageIndex, props.sessionId, content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, blocks: [{ kind: 'text', text: content }] } }} />)}</MessageActions>;
+      return <MessageActions sessionId={props.sessionId} payload={payload} message={payload.state.messages[messageIndex]} nativeMessageId={props.node.data.finalNode?.messageId} role="assistant" text={text} reasoning={props.node.data.blocks.filter(block => block.kind === 'reasoning').map(block => block.text ?? '').join('\n')}>{renderText(text, payload, messageIndex, props.sessionId, content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, blocks: [{ kind: 'text', text: content }] } }} />)}</MessageActions>;
     }
     return Assistant;
     });

@@ -46,7 +46,10 @@ export async function messageAction(store, state, events, request) {
     if (nativeId) (state.nativeMessageOverrides ??= {})[nativeId] = request.text;
     if (message) {
       message.content = request.text;
-      if (helper) helper.mes = request.text;
+      if (helper) {
+        helper.mes = request.text;
+        if (helper.swipes) helper.swipes[helper.swipe_id ?? 0] = request.text;
+      }
       invalidateMessageMemories(state, [message.id]);
     }
     return { state };

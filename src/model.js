@@ -12,6 +12,12 @@ export function makeModelCaller(llm) {
       const info = await llm.resolveModelInfo(agent.provider, agent.model, signal);
       if (info.reasoning?.efforts.some(effort => effort.id === agent.presetReasoningEffort)) reasoningEffort = agent.presetReasoningEffort;
     }
+    // Structured jobs should not inherit a provider's expensive default
+    // thinking mode. Explicit agent/preset settings and writer requests stay intact.
+    if (!reasoningEffort && !agent.presetReasoningEffort && schema && llm.resolveModelInfo) {
+      const info = await llm.resolveModelInfo(agent.provider, agent.model, signal);
+      reasoningEffort = info.reasoning?.efforts?.find(effort => effort.id === 'low')?.id;
+    }
     const mode = agent.protocol ?? 'tool';
     const contract = schema ? mode === 'tool'
       ? '本次是结构化任务。必须调用且只调用一次 tavern_result 工具返回最终结果，参数必须符合给定 JSON Schema。'
