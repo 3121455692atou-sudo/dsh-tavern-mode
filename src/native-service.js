@@ -6,9 +6,10 @@ import { readJson, atomicJson, safeId } from './storage.js';
 import { defaultTables } from './defaults.js';
 import { defaultConfig, validateConfig } from './contracts.js';
 import { describeTables } from './tables.js';
-import { runTurn, buildRoster } from './pipeline.js';
+import { runTurn, buildRoster, resumeStoryUpdates } from './pipeline.js';
 import { ensureTableHistory, recordTableChanges } from './table-history.js';
 import { configurationFields } from './configuration-history.js';
+import { openTurnCheckpoint, clearTurnCheckpoint } from './turn-checkpoint.js';
 
 const textOf = message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
 
@@ -54,6 +55,7 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
       await atomicJson(path, { ...data, nativeAnchorSeq: final.seq, nativeMessageId: final.data.message.id });
       await store.restore(session.id, pending.revision);
       await rm(pendingPath(session.id));
+      if (!data.pendingUpdates) await clearTurnCheckpoint(store, session.id);
       broadcast(session.id, { type: 'updated' });
     });
   }
@@ -169,7 +171,7 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
       client.send(JSON.stringify({ type: 'connected' }));
       for (const connected of connections.get(id) ?? []) connected();
     },
-    async run({ agent, messages, route, callModel, signal }) {
+    async run({ agent, messages, route, callModel, signal, turn, writeBoundary }) {
       const id = agent.id;
       if (!await ensure(id)) throw new Error('请先导入并选择角色卡');
       if (jobs.has(id)) throw new Error('该会话正在推进');
@@ -186,10 +188,10 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
           const savedConfig = state.config;
           state = structuredClone(state);
           await ensureTableHistory(store, state);
-          for (const config of Object.values(state.config.agents)) {
+          for (const [stage, config] of Object.entries(state.config.agents)) {
             const inherits = !config.provider && !config.model;
             config.provider ||= route.provider; config.model ||= route.model;
-            if (inherits && !config.reasoningEffort) config.reasoningEffort = route.reasoningEffort ?? '';
+            if (stage === 'write' && inherits && !config.reasoningEffort) config.reasoningEffort = route.reasoningEffort ?? '';
           }
           if (runtime) {
             for (const key of ['variables', 'globalVariables', 'characterVariables', 'messageVariables', 'scriptVariables', 'presetVariables', 'extensionSettings', 'worldbookSettings', 'worldbookOverrides', 'presetOverride', 'regexOrder']) if (runtime[key]) state[key] = runtime[key];
@@ -197,15 +199,39 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
             state.injections = runtime.injections ?? [];
           }
           const assets = await sessionAssets(state);
+          if (state.pendingUpdates) {
+            const saveProgress = async () => {
+              const saved = await store.saveSession({ ...state, config: savedConfig });
+              state.revision = saved.revision;
+              broadcast(id, { type: 'updated' });
+            };
+            await resumeStoryUpdates({ state, ...assets, callModel, signal, onProgress: saveProgress });
+            await saveProgress();
+            if (state.pendingUpdates) throw new Error(`上一条正文已保存，未完成更新仍失败：${state.pendingUpdates.error}`);
+            // A UI retry is an explicit command, not another writing turn.
+            if (input === '/tavern-retry-updates') return { ...state, config: savedConfig, updatesOnly: true };
+          } else if (input === '/tavern-retry-updates') throw new Error('当前没有未完成的表格或记忆更新');
+          const checkpoint = await openTurnCheckpoint({ store, state, assets, text: input });
+          const resumeModel = checkpoint.wrap(callModel);
           if (state.needsRoster && (state.config.playMode ?? 'agent') !== 'normal') {
-            state.characters = await buildRoster({ state, ...assets, text: input, callModel, signal });
+            state.characters = await buildRoster({ state, ...assets, text: input, callModel: resumeModel, signal, runIdentity: checkpoint.identity });
             state.needsRoster = false;
           }
-          const result = await runTurn({ state, ...assets, text: input, callModel, signal,
+          const result = await runTurn({ state, ...assets, text: input, callModel: resumeModel, signal, runIdentity: checkpoint.identity,
             scanWorldbook: args => runtimeCall(id, 'worldbookScan', args, signal),
             beforeWrite: async args => (await runtimeCall(id, 'promptReady', args, signal)) ?? { messages: args.messages },
             afterWrite: async args => await runtimeCall(id, 'messageReceived', args, signal),
             beforeCommit: async () => await runtimeCall(id, 'snapshot', {}, signal),
+            onStory: async story => {
+              story.config = savedConfig;
+              const user = story.messages.findLast(message => message.role === 'user');
+              if (user) user.nativeMessageId = messages.at(-1).id;
+              const boundary = writeBoundary?.();
+              if (boundary?.step !== undefined) {
+                await service.stageFinal(agent, story, turn, boundary.step, boundary.text);
+                await commitSession(agent.session);
+              }
+            },
           });
           result.config = savedConfig;
           result.messages.at(-2).nativeMessageId = messages.at(-1).id;
@@ -214,14 +240,20 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
       } catch (error) { jobs.delete(id); broadcast(id, { type: 'finished', cancelled: true }); throw error; }
     },
     async stageFinal(agent, state, turn, step, nativeText) {
-      const saved = await store.saveSession(state, { publish: false });
-      await atomicJson(pendingPath(agent.id), { revision: saved.revision, turn, step, text: saved.messages.at(-1).content, ...(nativeText === undefined ? {} : { nativeText }) });
+      if (state.updatesOnly) return;
+      await store.exclusive('native-commit:' + agent.id, async () => {
+        const saved = await store.saveSession(state, { publish: false });
+        await atomicJson(pendingPath(agent.id), { revision: saved.revision, turn, step, text: saved.messages.at(-1).content, ...(nativeText === undefined ? {} : { nativeText }) });
+      });
     },
     async commit(agent) { await commitSession(agent.session); jobs.delete(agent.id); broadcast(agent.id, { type: 'finished' }); },
     abort(id) { jobs.delete(id); broadcast(id, { type: 'finished', cancelled: true }); },
   };
   ctx.reflect.provide('tavernMode', service);
   ctx.on('agent/session-start', ({ agent }) => { if (ctx.sessionProjections.stateOf(agent.session, 'agentPreset') === 'tavern') commitSession(agent.session).catch(error => ctx.logger.warn(error)); });
+  ctx.on('session/event', (session, event) => {
+    if (event.type === 'assistant/message' && ctx.sessionProjections.stateOf(session, 'agentPreset') === 'tavern') commitSession(session).catch(error => ctx.logger.warn(error));
+  });
 
   return async function nativeApi(req, res, path, body, url, json) {
     if (path === '/model-attempts' && req.method === 'GET') {

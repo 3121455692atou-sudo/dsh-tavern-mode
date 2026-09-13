@@ -1,3 +1,4 @@
+import { expandedMessages } from './helpers/tool-context.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -52,7 +53,7 @@ function model(requests, label) {
   return async ({ stage, messages, schema, label: taskLabel }) => {
     const request = { case: label, stage, label: taskLabel, messages: structuredClone(messages), schema };
     requests.push(request); captures.push(request);
-    if (stage === 'advance' && schema !== PLAN) return { sections: { result: '中性推进结果。' } };
+    if (stage === 'advance' && schema !== PLAN) return { sections: { result: '中性推进结果。' }, ...(schema.properties.plan ? { plan: { scene, beats: ['整理资料。'], characterIntents: [], constraints: [] } } : {}) };
     if (stage === 'advance') return { scene, beats: ['整理资料。'], characterIntents: [], constraints: [] };
     if (stage === 'combine') return { scene, presentCharacterIds: ['actor-0', 'actor-1'], worldEntryIds: ['card:0'],
       situation: '开始整理资料。', characterViews: [], openThreads: [] };
@@ -69,7 +70,7 @@ function model(requests, label) {
     throw new Error(`Unexpected stage ${stage}`);
   };
 }
-const body = (requests, label) => requests.find(request => request.label === label)?.messages.find(message => message.content.startsWith('<books>')).content;
+const body = (requests, label) => expandedMessages(requests.find(request => request.label === label)?.messages).find(message => message.content.startsWith('<books>'))?.content;
 async function turn(t, args) {
   const before = structuredClone(args.state), assets = await sessionAssets(args.store, args.state), requests = [];
   const result = await runTurn({ state: args.state, ...assets, text: '甲和乙开始整理资料。', callModel: model(requests, t.name) });
@@ -77,8 +78,9 @@ async function turn(t, args) {
   return { assets, requests, result };
 }
 
-test('real loader brings an unselected manual resource only into its advance task', async t => {
+for (const mode of ['focused', 'full']) test(`real loader brings an unselected manual resource only into its advance task (${mode})`, async t => {
   const args = await fixture(t);
+  args.state.config.toolContextMode = mode;
   assert.ok(!args.state.worldbookIds.includes(args.atlas.id));
   const { assets, requests } = await turn(t, args);
   assert.deepEqual(assets.extraBooks.map(book => book.id), [args.publicBook.id]);
@@ -88,8 +90,14 @@ test('real loader brings an unselected manual resource only into its advance tas
   for (const request of requests.filter(request => request.label !== 'manual-task')) {
     assert.doesNotMatch(JSON.stringify(request.messages), /MANUAL_|LEDGER_|UNSELECTED_LIBRARY/);
   }
-  for (const stage of ['recall', 'combine', 'write']) {
+  for (const stage of mode === 'full' ? ['recall', 'combine', 'write'] : ['write']) {
     assert.match(JSON.stringify(requests.find(request => request.stage === stage).messages), /PUBLIC_ONLY/);
+  }
+  if (mode === 'focused') {
+    for (const request of requests.filter(request => ['recall', 'combine'].includes(request.stage))) {
+      assert.doesNotMatch(JSON.stringify(request.messages), /PUBLIC_ONLY/);
+    }
+    assert.ok(!requests.some(request => request.stage === 'combine'), 'the imported preset already plans the scene');
   }
 });
 

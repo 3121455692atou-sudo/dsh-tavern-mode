@@ -19,7 +19,22 @@ export function invalidateMessageMemories(state, ids) {
   removeTableSources(state, ids);
   const removed = new Set(ids);
   for (const id of Object.keys(state.memories)) state.memories[id] = state.memories[id].filter(memory => !memory.sourceMessageIds?.some(id => removed.has(id)));
+  if (state.memoryEvents) state.memoryEvents = state.memoryEvents.filter(event => !event.sourceMessageIds?.some(id => removed.has(id)));
   state.worldHistory = (state.worldHistory ?? []).filter(episode => !episode.sourceMessageIds?.some(id => removed.has(id)));
+  const pending = state.pendingUpdates;
+  if (pending?.context.sourceMessages.some(message => removed.has(message.id))) {
+    const assistant = state.messages.find(message => message.id === pending.context.assistant.id);
+    if (!assistant) delete state.pendingUpdates;
+    else {
+      pending.context.sourceMessages = pending.context.sourceMessages.flatMap(source => {
+        const current = state.messages.find(message => message.id === source.id);
+        return current ? [structuredClone(current)] : [];
+      });
+      pending.context.assistant = structuredClone(assistant);
+      pending.context.text = pending.context.sourceMessages.find(message => message.role === 'user')?.content ?? '';
+      pending.results = {}; delete pending.failures; delete pending.error;
+    }
+  }
 }
 
 export function deleteMessages(state, ids) {
@@ -46,7 +61,10 @@ export async function messageAction(store, state, events, request) {
     if (nativeId) (state.nativeMessageOverrides ??= {})[nativeId] = request.text;
     if (message) {
       message.content = request.text;
-      if (helper) helper.mes = request.text;
+      if (helper) {
+        helper.mes = request.text;
+        if (helper.swipes) helper.swipes[helper.swipe_id ?? 0] = request.text;
+      }
       invalidateMessageMemories(state, [message.id]);
     }
     return { state };

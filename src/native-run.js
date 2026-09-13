@@ -16,6 +16,7 @@ export function mergeTokenUsage(into, extra) {
 }
 
 const emptyUsage = () => ({ inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+const runError = reason => reason instanceof Error ? reason : new Error(reason?.kind === 'user' ? '用户已停止本轮' : String(reason?.message ?? reason?.kind ?? reason ?? '生成已停止'));
 
 // The pipeline pauses at each model call. DSH dispatches these calls as real tools.
 export class NativeRun {
@@ -31,7 +32,7 @@ export class NativeRun {
     });
     this.onAttempt = onAttempt;
     this.signal.addEventListener('abort', () => {
-      this.error = this.signal.reason ?? new Error('生成已停止');
+      this.error = runError(this.signal.reason);
       for (const task of this.tasks.values()) if (task.status === 'queued' || task.status === 'offered') task.reject(this.error);
       this.wake();
     }, { once: true });
@@ -69,7 +70,7 @@ export class NativeRun {
       const result = await this.callModel({ ...task.options, signal: AbortSignal.any([this.signal, signal]), onAttempt: record => this.onAttempt?.({ ...record, taskId: id, stage, label: task.label, provider: task.options.agent?.provider, model: task.options.agent?.model }) });
       this.signal.throwIfAborted();
       task.result = result; task.status = 'done'; task.resolve(result); return result;
-    } catch (error) { task.status = 'failed'; task.reject(error); this.controller.abort(error); throw error; }
+    } catch (error) { error = runError(error); task.status = 'failed'; task.reject(error); throw error; }
   }
   addUsage(usage) { this.pendingUsage = mergeTokenUsage(this.pendingUsage, usage); }
   takeUsage() {

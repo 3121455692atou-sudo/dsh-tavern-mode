@@ -1,6 +1,6 @@
 {
   "name": "dsh-tavern-mode",
-  "version": "0.4.1",
+  "version": "0.4.2-rc.4",
   "description": "DSH 酒馆模式：角色卡、预设、前端、独立角色记忆与多 agent 剧情",
   "type": "module",
   "main": "./src/index.js",
@@ -34,7 +34,8 @@
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.js",
     "check": "node scripts/check.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "verify:live": "node scripts/verify-live.mjs"
   },
   "allowScripts": {
     "esbuild": true
@@ -88,7 +89,9 @@
     "presets/",
     "cordis.patch.yml",
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "scripts/verify-live.mjs",
+    "REPAIR_RC4.zh-CN.md"
   ],
   "publishConfig": {
     "access": "public"

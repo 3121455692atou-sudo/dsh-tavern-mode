@@ -9,6 +9,7 @@ import { withoutLegacyBubble } from './speech-frame.js';
 import { ResourceLibrary } from './native-resources.jsx';
 import { createMessageActions } from './native-messages.jsx';
 import { extractInteraction, interactionHtml } from './interaction.js';
+import { displayMessage, findMessageIndex } from './native-display.js';
 
 export const inject = ['slots', 'sessions', 'conversation', 'workspaces', 'uiWorkspace'];
 const markdownLabels = { copy: '复制', copied: '已复制', code: '代码', open: '打开', download: '下载' };
@@ -41,6 +42,7 @@ export function apply(ctx) {
     .tavern-message-actions button{font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);background:transparent;border:0;border-radius:5px;padding:4px;cursor:pointer}
     .tavern-message-actions button:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}.tavern-message-actions button:disabled{opacity:.5;cursor:default}
     .tavern-message-editor{box-sizing:border-box;width:100%;min-height:160px;height:320px;max-height:60dvh;resize:vertical;padding:12px;font:inherit;color:inherit;background:var(--dsw-alias-fill-tsp-secondary);border:1px solid var(--dsw-alias-border-l2);border-radius:8px}
+    .tavern-thinking{margin:0 0 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:10px 12px}.tavern-thinking summary{cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:13px}.tavern-thinking-text{height:260px;white-space:pre-wrap;user-select:text}.tavern-thinking .tavern-message-actions{margin:6px 0}
     .tavern-library-title h2{margin:0;font-size:21px}.tavern-library-title p{margin:6px 0 20px}
     .tavern-settings .tavern-import-drop{display:grid;justify-items:center;gap:5px;width:100%;padding:20px;border-style:dashed;border-radius:12px;background:var(--dsw-alias-fill-tsp-secondary)}
     .tavern-import-plus{font-size:26px;line-height:1.2;color:var(--dsw-alias-label-tertiary)}
@@ -72,7 +74,10 @@ export function apply(ctx) {
         const settings = await runtime.bootstrap();
         if (disposed) return;
         const frame = ref.current;
+        if (!frame || disposed) return;
         frame.onload = () => {
+          if (disposed || ref.current !== frame) return;
+          port?.close();
           const channel = new MessageChannel(); port = channel.port1;
           port.onmessage = event => {
             if (event.data.type === 'height' && Number.isFinite(event.data.height)) frame.style.height = Math.max(24, event.data.height) + 'px';
@@ -80,17 +85,20 @@ export function apply(ctx) {
           };
           frame.contentWindow.postMessage({ type: 'tavern-component', hubId: controller.hubId, index, html: source }, settings.runtimeOrigin, [channel.port2]);
         };
-        frame.src = settings.runtimeOrigin + '/component';
+        // Each source revision gets its own document and handshake. A queued
+        // load event from the previous document must not consume the new port.
+        frame.src = settings.runtimeOrigin + '/component?instance=' + crypto.randomUUID();
       })().catch(error => setError(error.message));
-      return () => { disposed = true; port?.close(); };
+      return () => { disposed = true; if (ref.current) ref.current.onload = null; port?.close(); };
     }, [sessionId, source, index, ready, runtimeId]);
     return <>{error && <p role="alert">{error}</p>}{ready && <iframe key={runtimeId} ref={ref} className="tavern-native-component" title="角色卡前端组件" allow="clipboard-write" sandbox="allow-scripts allow-same-origin allow-modals allow-downloads" />}</>;
   }
 
   function renderText(text, payload, index, sessionId, native, placement = 2) {
     const state = payload.state, mode = state.renderMode ?? 'card';
-    if (state.helperChat?.find(message => message.tavernMessageId === state.messages[index]?.id)?.is_system ?? state.messages[index]?.is_hidden) return null;
-    text = state.helperChat?.find(message => message.tavernMessageId === state.messages[index]?.id)?.mes ?? state.messages[index]?.content ?? text;
+    const display = displayMessage(state, state.messages[index], text);
+    if (display.hidden) return null;
+    text = display.text;
     if (mode === 'text') return <pre style={{ whiteSpace: 'pre-wrap', font: 'inherit' }}>{text}</pre>;
     const interaction = placement === 2 ? extractInteraction(text) : { text, panel: null }; text = interaction.text;
     const env = macroEnvironment({ user: state.userName, char: payload.card.name, variables: state.variables, globalVariables: state.globalVariables, characterVariables: state.characterVariables, presetVariables: state.presetVariables, messageVariables: state.messageVariables, messageId: index < 0 ? undefined : index, messageSwipes: Object.fromEntries((state.helperChat ?? []).map((message, index) => [index, message.swipe_id ?? 0])), messages: state.messages, sessionId });
@@ -109,9 +117,9 @@ export function apply(ctx) {
       if (preset !== 'tavern' || !payload) return <Original {...props} />;
       if (hiddenNode(payload.state, props.node) || payload.state.deletedNativeMessageIds?.includes(props.node.id)) return null;
       const text = payload.state.nativeMessageOverrides?.[props.node.id] ?? props.node.data.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
+      if (text === '/tavern-retry-updates') return <p className="tavern-caption">重试未完成的表格与记忆更新</p>;
       const attachments = props.node.data.content.filter(block => block.type !== 'text');
-      let index = payload.state.messages.findIndex(message => message.nativeMessageId === props.node.id);
-      if (index < 0) index = payload.state.messages.findLastIndex(message => message.role === 'user' && message.content === text);
+      const index = findMessageIndex(payload.state, props.node.id, text, 'user');
       const render = content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, content } }} />;
       let start = index;
       while (start > 0 && payload.state.messages[start - 1].scriptCreated) start--;
@@ -133,10 +141,10 @@ export function apply(ctx) {
       if (props.node.data.status !== 'settled') return <Original {...props} />;
       const text = payload.state.nativeMessageOverrides?.[props.node.data.finalNode?.messageId] ?? props.node.data.blocks.filter(block => block.kind === 'text').map(block => block.text).join('');
       if (!text) return <Original {...props} />;
-      const index = payload.state.messages.findIndex(message => message.nativeMessageId === props.node.data.finalNode?.messageId);
-      const messageIndex = index < 0 ? payload.state.messages.findLastIndex(message => message.content === text) : index;
-      if (messageIndex < 0) return <Original {...props} />;
-      return <MessageActions sessionId={props.sessionId} payload={payload} message={payload.state.messages[messageIndex]} nativeMessageId={props.node.data.finalNode?.messageId} role="assistant" text={text}>{renderText(text, payload, messageIndex, props.sessionId, content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, blocks: [{ kind: 'text', text: content }] } }} />)}</MessageActions>;
+      const messageIndex = findMessageIndex(payload.state, props.node.data.finalNode?.messageId, text, 'assistant');
+      // A paid, settled writer response can predate the facts transaction or
+      // come from an older failed turn. Display regexes still apply to it.
+      return <MessageActions sessionId={props.sessionId} payload={payload} message={payload.state.messages[messageIndex]} nativeMessageId={props.node.data.finalNode?.messageId} role="assistant" text={text} reasoning={props.node.data.blocks.filter(block => block.kind === 'reasoning').map(block => block.text ?? '').join('\n')}>{renderText(text, payload, messageIndex, props.sessionId, content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, blocks: [{ kind: 'text', text: content }] } }} />)}</MessageActions>;
     }
     return Assistant;
     });

@@ -1,3 +1,4 @@
+import { toolScopeAllows } from './tool-policy.js';
 import officialDefault from '../vendor/default-preset.json' with { type: 'json' };
 
 const { openai_max_tokens: _defaultOutputLimit, openai_max_context: _defaultContextLimit, ...defaultWritingPreset } = officialDefault;
@@ -58,9 +59,9 @@ export function fromHelperPreset(helper, original = {}) {
   return result;
 }
 
-export function toolPresetMessages(preset) {
+export function toolPresetMessages(preset, { stage, explicit = false, mode = 'full' } = {}) {
   if (!preset) return [];
-  return presetPrompts(preset).filter(prompt => prompt.enabled && !prompt.marker && !MARKERS.includes(prompt.id) && prompt.content?.trim() && prompt.position?.type !== 'in_chat')
+  return presetPrompts(preset).filter(prompt => (mode === 'full' || explicit || toolScopeAllows(prompt, stage)) && prompt.enabled && !prompt.marker && !MARKERS.includes(prompt.id) && prompt.content?.trim() && prompt.position?.type !== 'in_chat')
     .map(prompt => ({ role: prompt.role ?? 'system', content: prompt.content }));
 }
 

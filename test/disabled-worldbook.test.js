@@ -1,3 +1,4 @@
+import { sourcePassages } from './helpers/tool-context.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildRoster, runTurn } from '../src/pipeline.js';
@@ -42,7 +43,7 @@ function captureModel(requests, worldEntryIds = ['card:3', 'card:4']) {
     if (stage === 'recall' && schema === SEARCH_QUERY) return { queries: ['中性查询'] };
     if (stage === 'recall') return { characterId: 'actor-a', memories: [], perspective: '中性视角。', likelyPresent: true };
     if (stage === 'combine') return { scene, presentCharacterIds: ['actor-a'], worldEntryIds, situation: '中性情形。', characterViews: [{ characterId: 'actor-a', knowledge: '中性认知。', intent: '中性意图。' }], openThreads: [] };
-    if (stage === 'advance' && schema !== PLAN) return { sections: { plan: '中性子任务结果。' } };
+    if (stage === 'advance' && schema !== PLAN) return { sections: { plan: '中性子任务结果。' }, ...(schema.properties.plan ? { plan: { scene, beats: ['中性节拍。'], characterIntents: [], constraints: [] } } : {}) };
     if (stage === 'advance') return { scene, beats: ['中性节拍。'], characterIntents: [], constraints: [] };
     if (stage === 'table') return { operations: [], scene, worldChanges: [], participatingCharacters: [], newCharacters: [] };
     if (stage === 'memory') return { characterId: 'actor-a', summary: '中性更新。', facts: [], relationships: [], openThreads: [], stateChanges: [] };
@@ -57,14 +58,15 @@ function hits(requests, markers) {
     .map(marker => ({ stage, label, search, marker })));
 }
 
-for (const options of [
+for (const mode of ['focused', 'full']) for (const options of [
   { name: 'disabled key hits and linked ids stay out of every model stage' },
   { name: 'recall search queries also exclude disabled profiles', search: true },
   { name: 'external books honor disable:true and implicit enabled entries', external: true, search: true },
   { name: 'disabled entries sharing an enabled id stay out of advance requests', duplicateId: true },
 ]) {
-  test(`runTurn: ${options.name}`, async t => {
+  test(`runTurn: ${options.name} (${mode})`, async t => {
     const state = buildState(), fixtureCard = structuredClone(card), extraBooks = [];
+    state.config.toolContextMode = mode;
     const prefix = options.external ? 'neutral-book' : 'card';
     if (options.external) {
       for (const entry of fixtureCard.character_book.entries.slice(0, 2)) { delete entry.enabled; entry.disable = true; }
@@ -81,16 +83,27 @@ for (const options of [
     const worldEntryIds = [`${prefix}:3`, `${prefix}:4`], requests = [];
     const result = await runTurn({ state, card: fixtureCard, extraBooks, legacy, callModel: captureModel(requests, worldEntryIds), text: '林岚，中性输入。' });
 
-    assert.equal(requests.length, options.search ? 8 : 7);
-    assert.deepEqual(new Set(requests.map(request => request.stage)), new Set(['recall', 'combine', 'advance', 'write', 'memory', 'table']));
+    assert.equal(requests.length, (mode === 'full' ? 6 : 4) + (options.search ? 1 : 0));
+    assert.deepEqual(new Set(requests.map(request => request.stage)), new Set(mode === 'full' ? ['recall', 'combine', 'advance', 'write', 'memory', 'table'] : ['recall', 'advance', 'write', 'table']));
     assert.equal(requests.filter(request => request.search).length, options.search ? 1 : 0);
-    for (const request of requests.filter(request => ['recall', 'combine', 'advance', 'write'].includes(request.stage))) {
+    const fullTextStages = mode === 'full' ? ['recall', 'combine', 'advance', 'write'] : ['advance', 'write'];
+    for (const request of requests.filter(request => fullTextStages.includes(request.stage))) {
       for (const marker of enabledMarkers) assert.ok(JSON.stringify(request.messages).includes(marker), `${request.stage}/${request.label} 应保留启用资料 ${marker}`);
     }
-    const combinationInput = JSON.parse(requests.find(request => request.stage === 'combine').messages.at(-1).content);
-    assert.deepEqual(combinationInput.worldbookDirectory.map(entry => entry.id), worldEntryIds);
+    const combinationRequest = requests.find(request => request.stage === 'combine');
+    if (combinationRequest) assert.deepEqual(JSON.parse(combinationRequest.messages.at(-1).content).worldbookDirectory.map(entry => entry.id), worldEntryIds);
+    if (mode === 'focused') {
+      assert.equal(combinationRequest, undefined);
+      assert.deepEqual(hits(requests.filter(request => ['recall', 'combine'].includes(request.stage)), enabledMarkers), [], 'focused 路由保留条目 ID，不重复注入世界书正文');
+    }
     assert.deepEqual({ state, fixtureCard, extraBooks }, original, '完整输入资料不能被过滤或修改');
     assert.equal(result.messages.at(-1).content, '中性正文。');
+    for (const request of requests.filter(request => ['memory', 'table'].includes(request.stage))) {
+      const input = JSON.parse(request.messages.at(-1).content);
+      assert.ok(!Object.hasOwn(input, 'completedStory'));
+      assert.equal(sourcePassages(input).filter(source => source.messageId === input.completedStoryMessageId).map(source => source.quote).join('\n'), '中性正文。');
+      assert.equal(JSON.stringify(input).split('中性正文。').length - 1, 1, 'the completed story is sent once, with its evidence ids');
+    }
     const leaked = hits(requests, disabledMarkers);
     t.diagnostic(JSON.stringify({ capturedRequests: requests.map(({ stage, label, search }) => ({ stage, label, search })), disabledHits: leaked }));
     assert.deepEqual(leaked, [], '停用条目不能直接进入任何模型请求');
@@ -103,7 +116,7 @@ test('buildRoster exposes only enabled worldbook content and ids', async () => {
   assert.equal(requests.length, 1);
   assert.equal(requests[0].stage, 'roster');
   const input = JSON.parse(requests[0].messages.at(-1).content);
-  assert.deepEqual(input.worldbook.map(entry => entry.id), ['card:3', 'card:4']);
+  assert.deepEqual([...input.staticWorldbook, ...input.worldbook].map(entry => entry.id), ['card:3', 'card:4']);
   assert.equal(hits(requests, enabledMarkers).length, 2);
   assert.deepEqual(hits(requests, disabledMarkers), []);
 });

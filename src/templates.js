@@ -1,14 +1,31 @@
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const source = dirname(fileURLToPath(import.meta.url));
-const root = dirname(source);
+const require = createRequire(import.meta.url);
+// ESM reads package metadata through the lookup path before following symlinks.
+// Grant only the worker's dependencies, including their hoisted/pnpm aliases.
+const dependencyRoots = [...new Set(['lodash', 'yaml'].flatMap(name => {
+  const resolved = realpathSync(dirname(require.resolve(`${name}/package.json`)));
+  const roots = [resolved];
+  for (const lookup of require.resolve.paths(name) ?? []) {
+    const candidate = join(lookup, name);
+    try {
+      if (realpathSync(candidate) === resolved) roots.push(candidate);
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+    }
+  }
+  return roots;
+}))];
 
 export function renderTemplates(input, { signal, timeout = 8000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
-      '--permission', `--allow-fs-read=${source}`, `--allow-fs-read=${join(root, 'node_modules')}`, '--max-old-space-size=192',
+      '--permission', `--allow-fs-read=${source}`, ...dependencyRoots.map(path => `--allow-fs-read=${path}`), '--max-old-space-size=192',
       join(source, 'template-worker.js'),
     ], { env: { LANG: 'zh_CN.UTF-8', TZ: 'Asia/Shanghai' }, stdio: ['pipe', 'pipe', 'pipe'], signal });
     let output = '', stderr = '', settled = false;

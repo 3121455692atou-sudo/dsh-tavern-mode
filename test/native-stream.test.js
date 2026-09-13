@@ -27,3 +27,15 @@ for (const mode of ['streamed', 'final', 'multiple']) test(`native reasoning pre
   assert.deepEqual(chunks.filter(c => c.type === 'block-end' && c.block.type === 'reasoning').map(c => c.block.text), mode === 'multiple' ? ['核对节拍。', '检查下一个小节。'] : ['核对节拍。']);
   assert.deepEqual(chunks.filter(c => c.type === 'block-end' && c.block.type === 'text').map(c => c.block.text), ['排练开始。']);
 });
+
+test('session-affine nested model stream bypasses the tavern wrapper', async () => {
+  const hooks = new Map(), agent = { id: 'same-session', session: {} }; let providerCalls = 0, pipelineCalls = 0;
+  const provider = async function* () { providerCalls++; yield { type: 'text-delta', text: '正文。' }; yield { type: 'finish', reason: { kind: 'stop' } }; };
+  const llm = { stream: options => hooks.get('llm/stream')(options, () => provider()) };
+  apply({ on: (name, callback) => hooks.set(name, callback), effect() {}, agents: new Map([[agent.id, agent]]), tools: { register() {} }, sessionProjections: { stateOf: () => 'tavern' }, llm,
+    tavernMode: { run: async ({ callModel }) => { pipelineCalls++; return { messages: [{ content: await callModel({ sessionId: agent.id, stage: 'write', agent: { provider: 'fixture', model: 'fixture' }, messages: [] }) }] }; }, stageFinal: async () => {} } });
+  await hooks.get('agent/pre-step')({ agent, turn: 1, step: 1, messages: [] }, () => {});
+  const chunks = []; for await (const chunk of llm.stream({ sessionId: agent.id })) chunks.push(chunk);
+  assert.equal(pipelineCalls, 1); assert.equal(providerCalls, 1);
+  assert.ok(chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === '正文。'));
+});
