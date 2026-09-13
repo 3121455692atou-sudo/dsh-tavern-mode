@@ -50,7 +50,7 @@ export function createBrowserRuntime(ctx) {
     const controller = controllers.get(id);
     const payload = await api('/native-state?id=' + encodeURIComponent(id));
     if (disposed || controllers.get(id) !== controller || controller?.disposed) return;
-    if (!payload.state) { publish(id, { payload: null, error: null, loaded: true }); return; }
+    if (!payload.state) { publish(id, { payload: null, draftConfig: payload.config, error: null, loaded: true }); return payload; }
     if (snapshots.get(id)?.payload?.helper?.commit !== payload.helper?.commit && !payload.generating) remount = true;
     payload.native = true; payload.theme = theme();
     publish(id, { payload, error: null });
@@ -69,7 +69,7 @@ export function createBrowserRuntime(ctx) {
     controller.ready = (async () => {
       const [settings, payload] = await Promise.all([loadBootstrap(), api('/native-ensure', { id })]);
       if (controllers.get(id) !== controller) return;
-      if (!payload.state) { publish(id, { payload: null, error: null, loaded: true }); return; }
+      if (!payload.state) { publish(id, { payload: null, draftConfig: payload.config, error: null, loaded: true }); return; }
       payload.native = true; payload.theme = theme(); publish(id, { payload, error: null });
       const frame = document.createElement('iframe'); controller.frame = frame;
       frame.className = 'tavern-runtime-overlay';
@@ -212,6 +212,17 @@ export function createBrowserRuntime(ctx) {
       const target = input(id);
       if (!target) throw new Error('当前对话输入框未就绪');
       target.setDraft('/tavern-retry-updates'); target.submit();
+    },
+    async retryFailed(id, token) {
+      const target = input(id);
+      if (!target) throw new Error('当前对话输入框未就绪');
+      const payload = await refresh(id);
+      if (payload.generating) throw new Error('本轮正在运行，请等待完成或先停止');
+      if (payload.recovery?.token !== token) throw new Error('该失败步骤已完成或已过期');
+      target.setDraft(`/tavern-resume ${token}`); target.submit();
+      // The host submit API returns void. Debounce until its session stream
+      // takes over the button's generating state.
+      await new Promise(resolve => setTimeout(resolve, 1000));
     },
     controller: id => controllers.get(id),
     async script(id, name) {

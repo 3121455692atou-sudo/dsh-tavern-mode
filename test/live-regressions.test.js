@@ -25,20 +25,50 @@ test('a silent provider stops once, preserves partial reasoning, and never start
   let count = 0, providerSignal; const attempts = [];
   const caller = makeModelCaller({ providerRetryPolicy: () => ({ mode: 'always', maxRetries: 3, retryableCodes: [] }),
     stream: async function* ({ signal }) { count++; providerSignal = signal; yield { type: 'reasoning-delta', index: 0, text: 'partial reasoning' }; await new Promise(() => {}); },
-  }, { toolTimeoutMs: 200, toolIdleMs: 15 });
+  }, { toolIdleMs: 15 });
   await assert.rejects(caller({ agent: { provider: 'test', model: 'test' }, messages: [], schema: { type: 'object' }, onAttempt: record => attempts.push(record) }), { code: 'TAVERN_TIMEOUT' });
   assert.equal(count, 1); assert.equal(providerSignal.aborted, true);
   assert.equal(attempts[0].response.reasoning, 'partial reasoning');
   assert.equal(attempts[0].status, 'failed'); assert.ok(attempts[0].elapsedMs >= 10);
 });
 
-test('continuous tool output still has an overall deadline and keeps partial arguments', async () => {
+for (const type of ['text-delta', 'reasoning-delta', 'tool-call-delta']) test(`${type} keeps a 15-minute stream alive without a total deadline`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const attempts = [];
   const caller = makeModelCaller({ stream: async function* ({ signal }) {
-    while (!signal.aborted) { yield { type: 'tool-call-delta', index: 0, name: 'tavern_result', argumentsDelta: ' ' }; await new Promise(resolve => setTimeout(resolve, 2)); }
-  } }, { toolTimeoutMs: 25, toolIdleMs: 100 });
-  await assert.rejects(caller({ agent: { provider: 'test', model: 'test' }, messages: [], schema: { type: 'object' }, onAttempt: r => attempts.push(r) }), { code: 'TAVERN_TIMEOUT' });
-  assert.ok(attempts[0].response.toolCalls[0].arguments.length > 0);
+    for (let i = 0; i < 20; i++) {
+      t.mock.timers.tick(45000); assert.equal(signal.aborted, false);
+      yield { type, index: 0, text: '正在整理。', name: 'tavern_result', argumentsDelta: ' ' };
+    }
+    yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: '{"ok":true}' } };
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  } });
+  assert.deepEqual(await caller({ agent: { provider: 'test', model: 'test' }, messages: [], schema: { type: 'object', properties: { ok: { type: 'boolean' } } }, onAttempt: r => attempts.push(r) }), { ok: true });
+  assert.equal(attempts[0].elapsedMs, 900000); assert.equal(attempts[0].status, 'succeeded');
+});
+
+test('empty deltas and accounting heartbeats cannot keep a silent stream alive', async () => {
+  let count = 0;
+  const caller = makeModelCaller({ stream: async function* ({ signal }) {
+    count++;
+    while (!signal.aborted) {
+      yield { type: 'reasoning-delta', index: 0, text: '' };
+      yield { type: 'usage', usage: { inputTokens: 0 } };
+      await new Promise(resolve => setTimeout(resolve, 2));
+    }
+  } }, { toolIdleMs: 20 });
+  await assert.rejects(caller({ agent: { provider: 'test', model: 'test' }, messages: [] }), { code: 'TAVERN_TIMEOUT' });
+  assert.equal(count, 1);
+});
+
+test('manual cancellation still interrupts continuous output and preserves partial text', async () => {
+  const controller = new AbortController(), attempts = [];
+  const caller = makeModelCaller({ stream: async function* () {
+    yield { type: 'text-delta', index: 0, text: '已输出的正文。' };
+    controller.abort(new Error('手动停止')); await new Promise(() => {});
+  } });
+  await assert.rejects(caller({ agent: { provider: 'test', model: 'test' }, messages: [], signal: controller.signal, onAttempt: r => attempts.push(r) }), /手动停止/);
+  assert.equal(attempts[0].response.text, '已输出的正文。');
 });
 
 test('one public event has multiple private references; a private event is excluded from other recall lanes', () => {

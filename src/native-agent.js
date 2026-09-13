@@ -16,7 +16,6 @@ export function apply(ctx) {
       parameters: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string' }, label: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' } }, required: ['taskId', 'label', 'provider', 'model'] },
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
       isConcurrencySafe: () => true,
-      timeoutMs: 600000,
       async execute(args, exec) {
         if (!isTavern(exec.agent)) throw new Error('该工具仅用于酒馆模式');
         const run = runs.get(exec.agent.id);

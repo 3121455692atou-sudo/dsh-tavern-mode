@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { readJson, atomicJson, safeId } from './storage.js';
 import { defaultTables } from './defaults.js';
-import { defaultConfig, validateConfig } from './contracts.js';
+import { completeConfig, validateConfig } from './contracts.js';
 import { describeTables } from './tables.js';
 import { runTurn, buildRoster, resumeStoryUpdates } from './pipeline.js';
 import { ensureTableHistory, recordTableChanges } from './table-history.js';
 import { configurationFields } from './configuration-history.js';
 import { openTurnCheckpoint, clearTurnCheckpoint } from './turn-checkpoint.js';
+import { RESUME_COMMAND, turnRecovery, publicRecovery } from './native-recovery.js';
 
 const textOf = message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
 
@@ -29,17 +30,18 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
   const broadcast = (id, value) => { for (const client of clients.get(id) ?? []) if (client.readyState === 1) client.send(JSON.stringify(value)); };
   const pendingPath = id => join(store.sessionDir(id), 'native-pending.json');
   const settingsPath = id => join(store.sessionDir(id), 'native-settings.json');
+  const recoveryPayload = async (state, session) => ({ ...await browserPayload(state), recovery: publicRecovery(await turnRecovery(store, state, session)) });
   async function draftSettings(id) {
     await nativeSession(id);
     return store.exclusive('native-settings:' + id, async () => {
       let settings = await readJson(settingsPath(id), null);
       if (!settings) {
         const defaults = await store.settings();
-        settings = { selection: { ...defaults.selection, cardId: '' }, config: defaults.config ?? defaultConfig(), ...(defaults.presetOverride ? { presetOverride: defaults.presetOverride } : {}) };
+        settings = { selection: { ...defaults.selection, cardId: '' }, config: completeConfig(defaults.config), ...(defaults.presetOverride ? { presetOverride: defaults.presetOverride } : {}) };
         await mkdir(store.sessionDir(id), { recursive: true, mode: 0o700 });
         await atomicJson(settingsPath(id), settings);
       }
-      return settings;
+      return { ...settings, config: completeConfig(settings.config) };
     });
   }
 
@@ -86,7 +88,7 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
       worldbookIds: selection.worldbookIds ?? [], regexIds: selection.regexIds ?? [],
       title: card.name, userName: selection.userName?.trim() || '你', persona: selection.persona ?? '',
       renderMode: selection.renderMode ?? (card.extensions?.regex_scripts?.some(r => !r.disabled) ? 'card' : 'bubble'),
-      config: settings.config ?? defaultConfig(), turn: 0, messages: greeting ? [{ id: randomUUID(), role: 'assistant', name: card.name, content: greeting, createdAt: new Date().toISOString(), greeting: true }] : [],
+      config: completeConfig(settings.config), turn: 0, messages: greeting ? [{ id: randomUUID(), role: 'assistant', name: card.name, content: greeting, createdAt: new Date().toISOString(), greeting: true }] : [],
       characters: [], memories: {}, tables, needsRoster: true,
       variables: { ...card.extensions?.tavern_helper?.variables }, globalVariables: {}, worldActivation: {}, scene: { location: '', time: '', summary: '' },
     };
@@ -173,15 +175,23 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
     },
     async run({ agent, messages, route, callModel, signal, turn, writeBoundary }) {
       const id = agent.id;
-      if (!await ensure(id)) throw new Error('请先导入并选择角色卡');
+      const initial = await ensure(id);
+      if (!initial) throw new Error('请先导入并选择角色卡');
       if (jobs.has(id)) throw new Error('该会话正在推进');
       jobs.set(id, { controller: { abort: reason => agent.cancel({ kind: 'user' }) }, callModel, preparing: true });
       try {
-        const input = messages.map(textOf).filter(Boolean).join('\n\n');
+        let input = messages.map(textOf).filter(Boolean).join('\n\n');
+        let nativeMessageId = messages.at(-1)?.id;
         if (!input.trim()) throw new Error('请输入本轮内容');
+        const resumeToken = input.startsWith(RESUME_COMMAND + ' ') ? input.slice(RESUME_COMMAND.length + 1).trim() : null;
+        const recovery = resumeToken ? await turnRecovery(store, initial, agent.session) : null;
+        if (resumeToken && (!recovery || recovery.token !== resumeToken)) throw new Error('该失败步骤已完成或已过期，请刷新后查看当前状态');
+        const updatesOnly = recovery?.kind === 'updates' || input === '/tavern-retry-updates';
+        if (recovery?.kind === 'turn') ({ text: input, nativeMessageId } = recovery.request);
         // Drain frontend edits before acquiring the session lock or reading its
         // snapshot. Their RPC handlers need the same lock to finish saving.
-        const runtime = await runtimeCall(id, 'prepare', { text: input, trigger: 'normal' }, signal);
+        const currentRuntime = await runtimeCall(id, recovery || updatesOnly ? 'resume' : 'prepare', { text: updatesOnly ? '' : input, trigger: updatesOnly ? 'continue' : 'normal' }, signal);
+        const runtime = recovery?.request?.runtime ?? currentRuntime;
         jobs.get(id).preparing = false;
         return await store.exclusive(id, async () => {
           let state = await ensure(id);
@@ -208,10 +218,11 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
             await resumeStoryUpdates({ state, ...assets, callModel, signal, onProgress: saveProgress });
             await saveProgress();
             if (state.pendingUpdates) throw new Error(`上一条正文已保存，未完成更新仍失败：${state.pendingUpdates.error}`);
+            await clearTurnCheckpoint(store, id);
             // A UI retry is an explicit command, not another writing turn.
-            if (input === '/tavern-retry-updates') return { ...state, config: savedConfig, updatesOnly: true };
-          } else if (input === '/tavern-retry-updates') throw new Error('当前没有未完成的表格或记忆更新');
-          const checkpoint = await openTurnCheckpoint({ store, state, assets, text: input });
+            if (updatesOnly) return { ...state, config: savedConfig, updatesOnly: true };
+          } else if (updatesOnly) throw new Error('当前没有未完成的表格或记忆更新');
+          const checkpoint = await openTurnCheckpoint({ store, state, assets, text: input, request: { nativeMessageId, runtime }, resume: recovery?.kind === 'turn' });
           const resumeModel = checkpoint.wrap(callModel);
           if (state.needsRoster && (state.config.playMode ?? 'agent') !== 'normal') {
             state.characters = await buildRoster({ state, ...assets, text: input, callModel: resumeModel, signal, runIdentity: checkpoint.identity });
@@ -225,7 +236,7 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
             onStory: async story => {
               story.config = savedConfig;
               const user = story.messages.findLast(message => message.role === 'user');
-              if (user) user.nativeMessageId = messages.at(-1).id;
+              if (user) user.nativeMessageId = nativeMessageId;
               const boundary = writeBoundary?.();
               if (boundary?.step !== undefined) {
                 await service.stageFinal(agent, story, turn, boundary.step, boundary.text);
@@ -234,7 +245,7 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
             },
           });
           result.config = savedConfig;
-          result.messages.at(-2).nativeMessageId = messages.at(-1).id;
+          result.messages.at(-2).nativeMessageId = nativeMessageId;
           return result;
         });
       } catch (error) { jobs.delete(id); broadcast(id, { type: 'finished', cancelled: true }); throw error; }
@@ -272,10 +283,10 @@ export function installNativeService(ctx, { store, sessionAssets, browserPayload
     if (path === '/native-state' && req.method === 'GET') {
       const id = safeId(url.searchParams.get('id')); const session = await nativeSession(id); await commitSession(session);
       let state; try { state = await store.session(id); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      json(res, state ? await browserPayload(state) : { state: null, ...await draftSettings(id) }); return true;
+      json(res, state ? await recoveryPayload(state, session) : { state: null, ...await draftSettings(id) }); return true;
     }
     if (path === '/native-ensure' && req.method === 'POST') {
-      const state = await ensure(body.id); json(res, state ? await browserPayload(state) : { state: null, ...await draftSettings(body.id) }); return true;
+      const state = await ensure(body.id); json(res, state ? await recoveryPayload(state, await nativeSession(body.id)) : { state: null, ...await draftSettings(body.id) }); return true;
     }
     if (path === '/native-selection' && req.method === 'POST') {
       let selection = body.selection;

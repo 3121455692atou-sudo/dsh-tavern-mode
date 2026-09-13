@@ -34,4 +34,9 @@ test('checkpoint and reconnect snapshots update React without erasing a running 
   await sockets[0].onmessage({ data: JSON.stringify({ type: 'connected' }) });
   assert.equal(runtime.get('session').payload.state.revision, 'missed-during-disconnect');
   assert.deepEqual(syncs, ['missed-during-disconnect']);
+  payload = { state: null, config: { playMode: 'normal', concurrency: 3 } };
+  await sockets[0].onmessage({ data: JSON.stringify({ type: 'connected' }) });
+  assert.equal(runtime.get('session').payload, null);
+  assert.equal(runtime.get('session').draftConfig.playMode, 'normal');
+  assert.equal(runtime.get('session').draftConfig.concurrency, 3);
 });
