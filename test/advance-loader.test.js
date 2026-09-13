@@ -78,8 +78,9 @@ async function turn(t, args) {
   return { assets, requests, result };
 }
 
-test('real loader brings an unselected manual resource only into its advance task', async t => {
+for (const mode of ['focused', 'full']) test(`real loader brings an unselected manual resource only into its advance task (${mode})`, async t => {
   const args = await fixture(t);
+  args.state.config.toolContextMode = mode;
   assert.ok(!args.state.worldbookIds.includes(args.atlas.id));
   const { assets, requests } = await turn(t, args);
   assert.deepEqual(assets.extraBooks.map(book => book.id), [args.publicBook.id]);
@@ -89,8 +90,14 @@ test('real loader brings an unselected manual resource only into its advance tas
   for (const request of requests.filter(request => request.label !== 'manual-task')) {
     assert.doesNotMatch(JSON.stringify(request.messages), /MANUAL_|LEDGER_|UNSELECTED_LIBRARY/);
   }
-  for (const stage of ['recall', 'combine', 'write']) {
+  for (const stage of mode === 'full' ? ['recall', 'combine', 'write'] : ['write']) {
     assert.match(JSON.stringify(requests.find(request => request.stage === stage).messages), /PUBLIC_ONLY/);
+  }
+  if (mode === 'focused') {
+    for (const request of requests.filter(request => ['recall', 'combine'].includes(request.stage))) {
+      assert.doesNotMatch(JSON.stringify(request.messages), /PUBLIC_ONLY/);
+    }
+    assert.ok(!requests.some(request => request.stage === 'combine'), 'the imported preset already plans the scene');
   }
 });
 

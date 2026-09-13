@@ -58,14 +58,15 @@ function hits(requests, markers) {
     .map(marker => ({ stage, label, search, marker })));
 }
 
-for (const options of [
+for (const mode of ['focused', 'full']) for (const options of [
   { name: 'disabled key hits and linked ids stay out of every model stage' },
   { name: 'recall search queries also exclude disabled profiles', search: true },
   { name: 'external books honor disable:true and implicit enabled entries', external: true, search: true },
   { name: 'disabled entries sharing an enabled id stay out of advance requests', duplicateId: true },
 ]) {
-  test(`runTurn: ${options.name}`, async t => {
+  test(`runTurn: ${options.name} (${mode})`, async t => {
     const state = buildState(), fixtureCard = structuredClone(card), extraBooks = [];
+    state.config.toolContextMode = mode;
     const prefix = options.external ? 'neutral-book' : 'card';
     if (options.external) {
       for (const entry of fixtureCard.character_book.entries.slice(0, 2)) { delete entry.enabled; entry.disable = true; }
@@ -82,14 +83,19 @@ for (const options of [
     const worldEntryIds = [`${prefix}:3`, `${prefix}:4`], requests = [];
     const result = await runTurn({ state, card: fixtureCard, extraBooks, legacy, callModel: captureModel(requests, worldEntryIds), text: '林岚，中性输入。' });
 
-    assert.equal(requests.length, options.search ? 7 : 6);
-    assert.deepEqual(new Set(requests.map(request => request.stage)), new Set(['recall', 'combine', 'advance', 'write', 'memory', 'table']));
+    assert.equal(requests.length, (mode === 'full' ? 6 : 4) + (options.search ? 1 : 0));
+    assert.deepEqual(new Set(requests.map(request => request.stage)), new Set(mode === 'full' ? ['recall', 'combine', 'advance', 'write', 'memory', 'table'] : ['recall', 'advance', 'write', 'table']));
     assert.equal(requests.filter(request => request.search).length, options.search ? 1 : 0);
-    for (const request of requests.filter(request => ['recall', 'combine', 'advance', 'write'].includes(request.stage))) {
+    const fullTextStages = mode === 'full' ? ['recall', 'combine', 'advance', 'write'] : ['advance', 'write'];
+    for (const request of requests.filter(request => fullTextStages.includes(request.stage))) {
       for (const marker of enabledMarkers) assert.ok(JSON.stringify(request.messages).includes(marker), `${request.stage}/${request.label} 应保留启用资料 ${marker}`);
     }
-    const combinationInput = JSON.parse(requests.find(request => request.stage === 'combine').messages.at(-1).content);
-    assert.deepEqual(combinationInput.worldbookDirectory.map(entry => entry.id), worldEntryIds);
+    const combinationRequest = requests.find(request => request.stage === 'combine');
+    if (combinationRequest) assert.deepEqual(JSON.parse(combinationRequest.messages.at(-1).content).worldbookDirectory.map(entry => entry.id), worldEntryIds);
+    if (mode === 'focused') {
+      assert.equal(combinationRequest, undefined);
+      assert.deepEqual(hits(requests.filter(request => ['recall', 'combine'].includes(request.stage)), enabledMarkers), [], 'focused 路由保留条目 ID，不重复注入世界书正文');
+    }
     assert.deepEqual({ state, fixtureCard, extraBooks }, original, '完整输入资料不能被过滤或修改');
     assert.equal(result.messages.at(-1).content, '中性正文。');
     for (const request of requests.filter(request => ['memory', 'table'].includes(request.stage))) {

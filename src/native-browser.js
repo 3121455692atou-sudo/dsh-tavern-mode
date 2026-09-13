@@ -55,7 +55,9 @@ export function createBrowserRuntime(ctx) {
     payload.native = true; payload.theme = theme();
     publish(id, { payload, error: null });
     if (remount) { controller?.dispose(); controllers.delete(id); await ensure(id); }
-    else if (controller?.port) await controller.call('sync', payload);
+    // Runtime callbacks own the in-flight chat. A checkpoint notification must
+    // update React without replacing an unsaved draft in the script host.
+    else if (controller?.port && !payload.generating) await controller.call('sync', payload);
     return payload;
   }
   async function ensure(id) {
@@ -120,7 +122,8 @@ export function createBrowserRuntime(ctx) {
             try { const value = await controller.call(data.method, data.args); await api('/native-reply', { sessionId: id, id: data.id, value }); }
             catch (error) { await api('/native-reply', { sessionId: id, id: data.id, error: error.message }); }
           } else if (data.type === 'assets') { controller.assetsStale = true; if (!snapshots.get(id)?.payload?.generating) { await controller.call('flush', {}); await refresh(id, true); }
-          } else if (data.type === 'updated') await refresh(id, data.remount);
+          } else if (data.type === 'connected') await refresh(id);
+          else if (data.type === 'updated') await refresh(id, data.remount);
           else if (data.type === 'finished') { await refresh(id); await controller.call('finished', { cancelled: !!data.cancelled }); if (controller.assetsStale) { await controller.call('flush', {}); await refresh(id, true); } }
           else if (data.type === 'error') report(id, data.message);
         } catch (error) { report(id, error.message); }
@@ -188,7 +191,15 @@ export function createBrowserRuntime(ctx) {
       return id;
     },
     get: id => snapshots.get(id) ?? empty,
-    setRunning(id, generating) { const payload = snapshots.get(id)?.payload; if (payload && payload.generating !== generating) publish(id, { payload: { ...payload, generating } }); },
+    setRunning(id, generating) {
+      const payload = snapshots.get(id)?.payload;
+      if (payload && payload.generating !== generating) {
+        publish(id, { payload: { ...payload, generating } });
+        // The DSH session stream is independent of the plugin socket. Catch up
+        // after completion even if its last update was lost during a reconnect.
+        if (!generating) void refresh(id).catch(error => report(id, error.message));
+      }
+    },
     async messageAction(id, request) {
       const target = input(id);
       if ((request.action === 'reroll' || request.action === 'rewrite') && !target) throw new Error('当前对话输入框未就绪');
@@ -196,6 +207,11 @@ export function createBrowserRuntime(ctx) {
       await refresh(id, true);
       if (result.text !== undefined) { target.setDraft(result.text); target.submit(); }
       return result;
+    },
+    retryUpdates(id) {
+      const target = input(id);
+      if (!target) throw new Error('当前对话输入框未就绪');
+      target.setDraft('/tavern-retry-updates'); target.submit();
     },
     controller: id => controllers.get(id),
     async script(id, name) {

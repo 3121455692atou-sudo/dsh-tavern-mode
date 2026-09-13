@@ -102,7 +102,7 @@ export async function apply(ctx, config = {}) {
         try { return { ...provider, provider: name, models: await ctx.llm.listModels(name) }; }
         catch (error) { return { ...provider, provider: name, models: [], error: error.message }; }
       }));
-      json(res, { version: '0.4.1', dshVersion: '0.1.5-rc.1', runtimeOrigin, helper: helper.status(), library: await store.library(), sessions: await store.sessions(), ...(await globalConfig()), providers: models }); return;
+      json(res, { version: '0.4.2-rc.2', dshVersion: '0.1.5-rc.1', runtimeOrigin, helper: helper.status(), library: await store.library(), sessions: await store.sessions(), ...(await globalConfig()), providers: models }); return;
     }
     if (req.method === 'GET' && path === '/session') { json(res, await browserPayload(await store.session(url.searchParams.get('id'), url.searchParams.get('revision')))); return; }
     if (req.method === 'GET' && path === '/item') { json(res, await store.item(url.searchParams.get('id'))); return; }

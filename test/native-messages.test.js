@@ -1,3 +1,4 @@
+import * as display from '../src/native-display.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -14,12 +15,22 @@ function harness(props, clipboard) {
   };
   const module = { exports: {} };
   const { code } = transformSync(readFileSync(new URL('../src/native-messages.jsx', import.meta.url), 'utf8'), { loader: 'jsx', format: 'cjs' });
-  runInNewContext(code, { module, exports: module.exports, require: () => React, navigator: { clipboard } });
+  runInNewContext(code, { module, exports: module.exports, require: name => name === 'react' ? React : display, navigator: { clipboard } });
   const Component = module.exports.createMessageActions({ messageAction: async (...args) => actions.push(args) });
   return { actions, render: () => { cursor = 0; return Component(props); } };
 }
 const all = node => typeof node === 'object' ? [node, ...node.children.flatMap(all)] : [];
 const button = (tree, label) => all(tree).find(node => node.type === 'button' && node.children.join('') === label);
+
+test('a live message before its Tavern revision renders without a pending-updates transaction', () => {
+  for (const role of ['user', 'assistant']) {
+    const h = harness({ sessionId: 'live', role, nativeMessageId: 'incoming', text: 'Fresh message', children: 'Fresh message',
+      payload: { state: { messages: [] }, generating: true } }, {});
+    const tree = h.render();
+    assert.equal(tree.children.includes('Fresh message'), true);
+    assert.equal(all(tree).some(node => node.props.role === 'status'), false);
+  }
+});
 
 test('Settled reasoning is expandable and copied verbatim while manual editing changes only the body', async () => {
   const reasoning = '<think>核对场景。</think>\n<story_plot>' + '管理员递来档案。\n'.repeat(2000) + '</story_plot>';

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runTurn } from '../src/pipeline.js';
+import { runTurn, resumeStoryUpdates } from '../src/pipeline.js';
 import { defaultConfig, COMBINATION, PLAN, MEMORY, TABLE_UPDATE, validateProtocol } from '../src/contracts.js';
 import { currentFacts } from '../src/memory.js';
 import { Store } from '../src/storage.js';
@@ -67,6 +67,8 @@ function ensemble() {
   const state = { id: 'ensemble-participants', userName: '访客', config: defaultConfig(), messages: [], scene, tables: {}, variables: {}, characters,
     memories: Object.fromEntries(characters.map(character => [character.id, [{ id: `private-${character.id}`, summary: `${character.name}独自整理过书签。`, facts: [], relationships: [], openThreads: [], stateChanges: [] }]])) };
   state.config.concurrency = 3;
+  // Compatibility path keeps explicitly independent per-character extraction.
+  state.config.toolContextMode = 'full';
   state.characters[1].memoryModel = { provider: 'fixture', model: 'arrival-memory' };
   const calls = [];
   const callModel = async ({ stage, schema, messages, agent }) => {
@@ -172,7 +174,7 @@ test('Participant protocol rejects missing fields, malformed evidence and extra 
   assert.throws(() => validateProtocol(missing, TABLE_UPDATE), /participatingCharacters/);
 });
 
-test('Invalid participants, duplicate identities and supplemental memory failures cannot commit a partial turn', async t => {
+test('Invalid postprocessing preserves authored text while preventing partial fact updates', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'tavern-participant-failure-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const store = new Store(directory); await store.init();
@@ -196,17 +198,26 @@ test('Invalid participants, duplicate identities and supplemental memory failure
     fixture.state = await store.saveSession(fixture.state);
     const before = structuredClone(fixture.state);
     let commitCalled = false;
-    await assert.rejects(async () => store.saveSession(await runTurn({ ...fixture,
+    const saved = await store.saveSession(await runTurn({ ...fixture,
       beforeCommit: async () => { commitCalled = true; return {}; },
       callModel: async request => {
         const response = await fixture.callModel(request);
         if (request.stage === stage) corrupt(response, JSON.parse(request.messages.at(-1).content));
         return response;
       },
-    })), expected);
-    assert.equal(commitCalled, false);
+    }));
+    assert.match(saved.pendingUpdates.error, expected);
+    assert.equal(commitCalled, true);
     assert.deepEqual(fixture.state, before);
-    assert.deepEqual(await store.session(fixture.state.id), before);
+    assert.equal(saved.messages.length, before.messages.length + 2);
+    for (const key of ['tables', 'memories', 'characters', 'scene', 'worldHistory']) assert.deepEqual(saved[key], before[key]);
+    assert.deepEqual((await store.session(fixture.state.id)).pendingUpdates, saved.pendingUpdates);
     if (stage === 'table') assert.deepEqual(fixture.calls.filter(call => call.stage === 'memory').map(call => call.input.character.id), ['host', 'planned']);
+    if (name === 'new character memory failure') {
+      const recovered = await resumeStoryUpdates({ state: await store.session(saved.id), card: fixture.card, callModel: fixture.callModel });
+      assert.equal(recovered.pendingUpdates, undefined);
+      const newcomer = recovered.characters.find(character => character.name === 'Mira');
+      assert.equal(recovered.memories[newcomer.id].length, 1);
+    }
   });
 });

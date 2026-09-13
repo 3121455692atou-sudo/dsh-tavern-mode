@@ -1,4 +1,5 @@
 import Ajv from 'ajv';
+import { parseResultText, normalizeStringArrays } from './protocol-repair.js';
 
 const ajv = new Ajv({ allErrors: true, strict: true, allowUnionTypes: true });
 const text = { type: 'string' };
@@ -55,24 +56,42 @@ export class ProtocolError extends Error { constructor(message) { super(message)
 export function validateProtocol(value, schema) {
   let validate = validators.get(schema);
   if (!validate) { validate = ajv.compile(schema); ajv.removeSchema(schema); validators.set(schema, validate); }
-  if (!validate(value)) throw new ProtocolError(ajv.errorsText(validate.errors, { separator: '; ' }));
+  if (!validate(value)) {
+    const error = new ProtocolError(ajv.errorsText(validate.errors, { separator: '; ' }));
+    error.phase = 'schema'; error.issues = structuredClone(validate.errors); error.candidate = value;
+    throw error;
+  }
   return value;
 }
 
-export function decodeProtocol(response, schema, mode = 'tool') {
-  let value;
+export function decodeProtocol(response, schema, mode = 'tool', onNormalization) {
+  let value, envelope;
   try {
     if (mode === 'tool') {
-      const calls = response.toolCalls;
-      if (calls.length !== 1 || calls[0].name !== 'tavern_result') throw new ProtocolError('需要且只能调用一次 tavern_result');
-      value = JSON.parse(calls[0].arguments);
+      const calls = response.toolCalls ?? [];
+      if (calls.length === 1 && calls[0].name === 'tavern_result') {
+        value = JSON.parse(calls[0].arguments);
+      } else if (!calls.length) {
+        // This tool only returns data and has no external side effects. A whole,
+        // valid JSON envelope is equivalent; ordinary prose/refusals are not.
+        const parsed = parseResultText(response.text);
+        if (!parsed.found) { const error = new ProtocolError('模型没有返回结构化结果；已停止自动重试，请查看原始响应'); error.phase = 'unstructured'; throw error; }
+        value = parsed.value; envelope = 'text-json';
+      } else throw new ProtocolError('需要且只能调用一次 tavern_result');
     } else {
       const matches = [...response.text.matchAll(/<tavern_result>\s*([\s\S]*?)\s*<\/tavern_result>/g)];
       if (matches.length !== 1) throw new ProtocolError('需要且只能包含一个 <tavern_result> JSON 协议块');
       value = JSON.parse(matches[0][1]);
     }
-  } catch (error) { if (error instanceof ProtocolError) throw error; throw new ProtocolError(`JSON 解码失败：${error.message}`); }
-  return validateProtocol(value, schema);
+  } catch (error) {
+    if (error instanceof ProtocolError) throw error;
+    const failure = new ProtocolError(`JSON 解码失败：${error.message}`); failure.phase = 'decode'; throw failure;
+  }
+  const changes = [];
+  const normalized = normalizeStringArrays(value, schema, changes);
+  const result = validateProtocol(normalized, schema);
+  if (envelope || changes.length) onNormalization?.({ envelope, changes });
+  return result;
 }
 
 export const ROLE_INSTRUCTIONS = {
@@ -86,6 +105,7 @@ export const ROLE_INSTRUCTIONS = {
 };
 for (const stage of ['recall', 'combine', 'memory', 'table']) ROLE_INSTRUCTIONS[stage] += ' 当前状态只列出本轮相关项，未列出的项仍保存在完整状态记录中。';
 for (const stage of ['memory', 'table']) ROLE_INSTRUCTIONS[stage] += ' sourcePassages 按消息分组，每组只有一个 messageId，其 passages 按原文顺序保存完整的 {id,quote} 段落。messageId 等于 completedStoryMessageId 的一组就是已完成正文，不另行重复全文。';
+ROLE_INSTRUCTIONS.memory += ' 若输入 task 要求共同事件协议，则按该 task 与本次 Schema 返回 events/characters：共同事件只存一份，各角色只持有知情引用和个人状态变化；不要返回旧版个人摘要字段。';
 ROLE_INSTRUCTIONS.table += ' templates 提供表结构、列名、约束和说明；tableRows 提供当前行，按 tableId 对应 templates 的 id。';
 ROLE_INSTRUCTIONS.combine += ' 记忆中没有记录不代表当下无法观察或交流；尚未告知只表示既有信息差，角色意图仍须依据其设定与当前情境判断。';
 ROLE_INSTRUCTIONS.advance += ' 随情节节点更新角色知识：角色能够听懂本轮已经说出的信息，并通过观察确认变化，不能把开场时的未知固定到整轮结束。';
@@ -98,15 +118,17 @@ export function defaultConfig(route = {}) {
   for (const key of ['recall', 'combine', 'advance', 'write', 'memory', 'table']) {
     models[key] = { provider: route.provider ?? '', model: route.model ?? '', reasoningEffort: '', temperature: key === 'write' ? null : 0.5, maxTokens: null, protocol: 'tool', prompt: '', presetId: '' };
   }
-  return { playMode: 'agent', normalMaxInputTokens: 200000, agents: models, concurrency: 4, historyTurns: 12, recallCount: 8, recallBatchSize: 48, protocolRetries: 3, templateTimeout: 8000 };
+  return { playMode: 'agent', toolContextMode: 'focused', normalMaxInputTokens: 200000, agents: models, concurrency: 4, historyTurns: 12, recallCount: 8, recallBatchSize: 48, protocolRetries: 3, templateTimeout: 8000 };
 }
 
 export function validateConfig(config) {
   config.playMode ??= 'agent';
+  config.toolContextMode ??= 'focused';
   config.normalMaxInputTokens ??= 200000;
   for (const key of ['recall', 'combine', 'advance', 'write', 'memory', 'table']) if (config.agents?.[key]) config.agents[key].presetId ??= '';
   const properties = {
     playMode: { type: 'string', enum: ['agent', 'normal'] },
+    toolContextMode: { type: 'string', enum: ['focused', 'full'] },
     normalMaxInputTokens: { type: 'integer', minimum: 1 },
     agents: object(Object.fromEntries(['recall', 'combine', 'advance', 'write', 'memory', 'table'].map(key => [key, object({
       provider: text, model: text, reasoningEffort: text, temperature: { type: ['number', 'null'], minimum: 0, maximum: 2 },

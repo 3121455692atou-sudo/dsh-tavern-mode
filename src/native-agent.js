@@ -47,7 +47,7 @@ export function apply(ctx) {
     if (!boundary) throw new Error('酒馆模式未收到本轮输入');
     let run = runs.get(agent.id);
     if (!run) {
-      run = new NativeRun({ signal: boundary.signal, callModel, onAttempt: record => ctx.tavernMode.recordModelAttempt(agent.id, record), work: (dispatch, signal) => ctx.tavernMode.run({ agent, messages: boundary.messages, route: options, callModel: dispatch, signal }) });
+      run = new NativeRun({ signal: boundary.signal, callModel, onAttempt: record => ctx.tavernMode.recordModelAttempt?.(agent.id, record), work: (dispatch, signal) => ctx.tavernMode.run({ agent, messages: boundary.messages, route: options, callModel: dispatch, signal, turn: boundary.turn, writeBoundary: () => ({ step: run.writeStep, text: run.writeText }) }) });
       run.turn = boundary.turn;
       runs.set(agent.id, run);
     }
@@ -64,7 +64,13 @@ export function apply(ctx) {
       yield { type: 'usage', usage: run.takeUsage() };
       yield { type: 'finish', reason: { kind } };
     }
-    const result = await run.next();
+    let result;
+    try { result = await run.next(); }
+    catch (error) {
+      // Failed calls were previously dropped when next() threw before finish.
+      yield { type: 'usage', usage: run.takeUsage() };
+      throw error;
+    }
     if (result.tasks) {
       yield* emitTools(result.tasks);
       yield* emitFinish('tool-calls');
@@ -81,7 +87,7 @@ export function apply(ctx) {
         ...task.options,
         signal: AbortSignal.any([run.signal, boundary.signal].filter(Boolean)),
         onChunk: chunk => push(chunk),
-        onAttempt: record => ctx.tavernMode.recordModelAttempt(agent.id, { ...record, taskId: task.id, stage: task.stage, label: task.label, provider: task.options.agent?.provider, model: task.options.agent?.model }),
+        onAttempt: record => ctx.tavernMode.recordModelAttempt?.(agent.id, { ...record, taskId: task.id, stage: task.stage, label: task.label, provider: task.options.agent?.provider, model: task.options.agent?.model }),
       }).then(value => push({ done: true, value }), error => push({ error }));
       let reasoningIndex = -1, textIndex = -1, nextIndex = 0, reasoning = '', text = '';
       const emittedReasoning = new Set();
@@ -128,6 +134,7 @@ export function apply(ctx) {
       yield* emitFinish('stop');
       return;
     }
+    if (result.value.updatesOnly) { yield* emitFinish('stop'); return; }
     await ctx.tavernMode.stageFinal(agent, result.value, boundary.turn, run.writeStep ?? boundary.step, run.writeText);
     if (run.writeStep !== undefined) { yield* emitFinish('stop'); return; }
     const text = result.value.messages.at(-1).content;
@@ -142,7 +149,13 @@ export function apply(ctx) {
     runs.delete(agent.id);
   });
   ctx.on('tools/result', (exec, result) => {
-    if (exec.agent && exec.name.startsWith('tavern_') && result.isError) runs.get(exec.agent.id)?.abort(new Error(result.content?.filter(block => block.type === 'text').map(block => block.text).join('\n') || '酒馆工具调用失败'));
+    if (exec.agent && exec.name.startsWith('tavern_') && result.isError) {
+      const run = runs.get(exec.agent.id);
+      // execute() has already rejected this task into the pipeline, which will
+      // await independent siblings before ending the turn. External dispatch
+      // errors still need to wake a pipeline whose task was never executed.
+      if (run && ![...run.tasks.values()].some(task => task.status === 'failed')) run.abort(new Error(result.content?.filter(block => block.type === 'text').map(block => block.text).join('\n') || '酒馆工具调用失败'));
+    }
   });
   ctx.on('agent/error', ({ agent, error }) => { runs.get(agent.id)?.abort(error); runs.delete(agent.id); ctx.tavernMode.abort(agent.id); });
   ctx.on('session/event', (session, event) => {

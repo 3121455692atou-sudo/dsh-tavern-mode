@@ -35,18 +35,13 @@ test('Writing keeps truncated output instead of failing the turn', async () => {
   assert.equal(await call({ agent: { provider: 'fixture', model: 'fixture' }, messages: [{ role: 'user', content: '写' }] }), '未写完的正文');
 });
 
-test('Structured tasks retry truncated output as a protocol error', async () => {
+test('Structured tasks do not retry a truncated tool call at the same output limit', async () => {
   let calls = 0;
   const call = makeModelCaller({ stream: async function* () {
     calls++;
-    if (calls === 1) {
-      yield { type: 'text-delta', text: '{"ok":' };
-      yield { type: 'finish', reason: { kind: 'max-tokens' } };
-    } else {
-      yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: JSON.stringify({ ok: true }) } };
-      yield { type: 'finish', reason: { kind: 'tool-calls' } };
-    }
+    yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: '{"ok":' } };
+    yield { type: 'finish', reason: { kind: 'max-tokens' } };
   } });
-  assert.deepEqual(await call({ agent: { provider: 'fixture', model: 'fixture' }, messages: [{ role: 'user', content: '填' }], schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } }), { ok: true });
-  assert.equal(calls, 2);
+  await assert.rejects(() => call({ agent: { provider: 'fixture', model: 'fixture' }, messages: [{ role: 'user', content: '填' }], schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } }));
+  assert.equal(calls, 1);
 });

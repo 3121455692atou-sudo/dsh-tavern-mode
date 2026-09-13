@@ -150,7 +150,7 @@ export async function assembleWritingPrompt({ state, card, preset, worldbook, pl
   if (preset?.assistant_prefill) messages.push({ role: 'assistant', content: preset.assistant_prefill });
   const rendered = await renderTemplates({ env, tables: tableDescriptions, regexScripts: scripts, texts: messages.map(message => ({ text: message.content, ...(message.raw ? { macros: false, ejs: false, conditions: false } : {}) })) }, { signal });
   messages = messages.map((message, index) => ({ ...message, content: rendered.texts[index] })).filter(message => message.content.trim());
-  const fixed = message => message.role === 'system' && message.cacheStatic === true;
+  const fixed = message => message.cacheStatic === true;
   messages = [...messages.filter(fixed), ...messages.filter(message => !fixed(message))];
   if (normal && !deferBudget) messages = trimHistory(messages, state.config.normalMaxInputTokens ?? 200000);
   const historyMessages = messages.filter(message => message.history).map(({ role, content }) => ({ role, content }));

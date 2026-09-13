@@ -97,11 +97,16 @@ test('A 500-episode turn bounds each agent input, distinguishes outdated knowled
       return { characterId: input.character.id, memories: input.memories.map(memory => ({ id: memory.id, relevance: 1 })), perspective: '回想钥匙的下落。', likelyPresent: true };
     }
     if (schema === COMBINATION) {
-      assert.equal(input.recalls.length, 2); assert.ok(input.recalls.every(recall => recall.records.length === 8 && recall.memories === undefined));
+      assert.equal(input.recalls.characters.length, 2); assert.ok(input.recalls.characters.every(recall => recall.records.length === 8 && recall.memories === undefined));
       assert.equal(input.worldState[0].value, '周川背包'); assert.ok(input.worldEpisodes.length <= 8);
       return { scene, presentCharacterIds: ['a', 'b'], worldEntryIds: [], situation: '归还钥匙', characterViews: [], openThreads: [] };
     }
     if (schema === PLAN) return { scene, beats: ['归还钥匙'], characterIntents: [], constraints: [] };
+    if (schema?.properties.events) {
+      counts.memory++;
+      const sourceId = sourcePassages(input).at(-1).id;
+      return { events: [{ summary: '银钥匙交给林岚。', knownByCharacterIds: ['a', 'b'], evidence: { sourceId } }], characters: input.characterStates.map(c => ({ characterId: c.characterId, stateChanges: [{ op: 'set', target: { id: c.currentState[0].id }, value: '林岚内袋', evidence: { sourceId } }] })) };
+    }
     if (schema === MEMORY || schema === TABLE_UPDATE) {
       const current = schema === MEMORY ? input.currentState : input.currentWorldState;
       const update = { op: 'set', target: { id: current[0].id }, value: '林岚内袋', evidence: { sourceId: sourcePassages(input).at(-1).id } };
@@ -115,7 +120,7 @@ test('A 500-episode turn bounds each agent input, distinguishes outdated knowled
     return story;
   };
   const result = await runTurn({ state: saved, card: { name: '排练室', description: '两位成年乐手。' }, text: '那把银色的钥匙找到了吗？', callModel });
-  assert.deepEqual(counts, { query: 2, recall: 2, memory: 2 });
+  assert.deepEqual(counts, { query: 2, recall: 2, memory: 1 });
   assert.equal(currentFacts(result.memories.a)[0].value, '林岚内袋');
   assert.equal(currentFacts(result.memories.b)[0].value, '林岚内袋');
   assert.equal(currentFacts(result.worldHistory)[0].value, '林岚内袋');
@@ -128,7 +133,7 @@ test('A 500-episode turn bounds each agent input, distinguishes outdated knowled
   assert.equal(currentFacts(restored.worldHistory)[0].value, '周川背包');
 });
 
-test('The model adapter retries evidence failures using the same structured contract', async () => {
+test('The model adapter repairs evidence failures using the same contract and supplied evidence', async () => {
   let attempts = 0;
   const source = [{ id: 'message', content: '钥匙放在桌上。' }];
   const call = makeModelCaller({ async *stream() {
@@ -137,7 +142,7 @@ test('The model adapter retries evidence failures using the same structured cont
     yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: JSON.stringify(value) } };
     yield { type: 'finish', reason: { kind: 'tool-calls' } };
   } });
-  await call({ agent: { provider: 'fixture', model: 'fixture' }, messages: [], schema: MEMORY, validate: value => validateStateChanges(resolveStateChanges(value.stateChanges, [], evidenceSources(source)), [], source) });
+  await call({ agent: { provider: 'fixture', model: 'fixture' }, messages: [], schema: MEMORY, repairContext: { sourcePassages: evidenceSources(source) }, validate: value => validateStateChanges(resolveStateChanges(value.stateChanges, [], evidenceSources(source)), [], source) });
   assert.equal(attempts, 2);
 });
 
@@ -208,7 +213,7 @@ test('Independent character search and recall agents overlap before combination 
    const input=JSON.parse(messages.at(-1).content);
    if(schema===SEARCH_QUERY){searches.add(input.character.id);if(searches.size===2)release();await ready;assert.equal(searches.size,2,'searches must overlap');return{queries:['银钥匙 老码头']};}
    if(stage==='recall'){const id=input.character.id;assert.ok(input.memories.every(record=>record.id.startsWith(id+'-')));recalled.add(id);return{characterId:id,memories:[{id:input.memories[0].id,relevance:1}],perspective:'回忆自己的经历。',likelyPresent:true};}
-   assert.equal(schema,COMBINATION);assert.equal(recalled.size,2);assert.ok(input.recalls.every(recall=>recall.records.every(record=>record.summary.includes(recall.characterId))));throw Error('parallel-probe-complete');
+   assert.equal(schema,COMBINATION);assert.equal(recalled.size,2);assert.ok(input.recalls.characters.every(recall=>recall.records.every(record=>record.summary.includes(recall.characterId))));throw Error('parallel-probe-complete');
   }}),/parallel-probe-complete/);
  }finally{clearTimeout(timer);}
 });

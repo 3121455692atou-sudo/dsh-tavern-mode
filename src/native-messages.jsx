@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { displayMessage } from './native-display.js';
 
 export function createMessageActions(runtime) {
   return function MessageActions({ sessionId, payload, message, nativeMessageId, text, role, children, changed, reasoning = '' }) {
@@ -8,7 +9,7 @@ export function createMessageActions(runtime) {
     const thinking = message?.extra?.reasoning || reasoning;
     const disabled = busy || payload.generating;
     const canReroll = !!nativeMessageId && !message?.greeting;
-    const content = payload.state.helperChat?.find(item => item.tavernMessageId === message?.id)?.mes ?? message?.content ?? payload.state.nativeMessageOverrides?.[nativeMessageId] ?? text;
+    const content = displayMessage(payload.state, message, payload.state.nativeMessageOverrides?.[nativeMessageId] ?? text).text;
     async function act(action, text) {
       setBusy(true); setError('');
       try {
@@ -19,6 +20,11 @@ export function createMessageActions(runtime) {
       finally { setBusy(false); }
     }
     return <div className="tavern-message" data-message-role={role}>
+      {message?.id && message.id === payload.state.pendingUpdates?.context?.assistant?.id && <div className="tavern-error" role="status">
+        正文已保存。表格或记忆更新{payload.generating ? '进行中' : '未完成'}。
+        {payload.state.pendingUpdates.error && <span>{payload.state.pendingUpdates.error}</span>}
+        {!payload.generating && <button disabled={busy} onClick={() => runtime.retryUpdates(sessionId)}>仅重试未完成更新</button>}
+      </div>}
       {role === 'assistant' && thinking && <details className="tavern-thinking">
         <summary>思考过程 · {Array.from(thinking).length.toLocaleString()} 字符</summary>
         <div className="tavern-message-actions">

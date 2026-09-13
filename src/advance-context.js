@@ -1,18 +1,21 @@
+import { factorEvaluatedMessages } from './evaluated-context.js';
 import { staticText } from './prompt-context.js';
 import { renderTemplates } from './templates.js';
 
 // Preserve the imported template, but move its changing substitutions to named
 // input values. Repeated placeholders reference one copy of the same value.
-// Executable templates retain their original evaluation as one dynamic block.
+// Executable templates retain their original ordered, single evaluation before
+// conservative post-evaluation factoring. Ambiguous boundaries stay unchanged.
 export async function advanceMessages({ source, values, bookParts, replace, relay, env, tables, signal, timeout }) {
   // Do not change evaluation order when any template can execute code or carry
   // a condition across a substitution boundary.
   const executable = /<%|<if\b|\{\{\s*(?:set|add|inc|dec|delete|push|pop)/i;
   if (source.some(prompt => executable.test(replace(prompt.content, values, relay)))) {
     const rendered = await renderTemplates({ env, tables, texts: source.map(prompt => ({ text: replace(prompt.content, values, relay) })) }, { signal, timeout });
-    return source.map((prompt, index) => ({ role: /^(ai|assistant)$/i.test(prompt.role) ? 'assistant' : String(prompt.role ?? 'user').toLowerCase(), content: rendered.texts[index],
+    const evaluated = source.map((prompt, index) => ({ role: /^(ai|assistant)$/i.test(prompt.role) ? 'assistant' : String(prompt.role ?? 'user').toLowerCase(), content: rendered.texts[index],
       cacheStatic: staticText(prompt.content) && staticText(replace(prompt.content, values, relay)) && !/(?<!\\)\$[15678]\b|\{\{/.test(prompt.content),
-    })).filter(message => message.content.trim());
+    }));
+    return factorEvaluatedMessages(source, evaluated, { bookParts }).filter(message => message.content.trim());
   }
   const slots = new Map();
   const ref = (name, content, cacheStatic = false) => {

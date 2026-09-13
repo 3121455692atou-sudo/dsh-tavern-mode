@@ -42,7 +42,7 @@ test('evidence grouping preserves every quote, evidence id and message owner wit
   for (const message of messages) assert.equal(JSON.stringify(sourceView).split(message.id).length - 1, 1);
 });
 
-test('executable presets keep substitution evaluation order and cannot enter the fixed prefix', async () => {
+test('executable presets evaluate once before safe context factoring', async () => {
   await runAdvancePreset({ state: { turn: 0, userName: '访客', variables: { phase: 'BEFORE_SCRIPT' }, messages: [], tables: {}, config: defaultConfig() },
     card: { name: '场景' }, text: '{{getvar::phase}}', worldbook: [], emit() {}, trace: [],
     data: { plotTasks: [{ name: '脚本', extractTags: 'plan', promptGroup: [
@@ -51,10 +51,11 @@ test('executable presets keep substitution evaluation order and cannot enter the
       { role: 'system', content: 'FIXED_RULE' },
     ] }] },
     callModel: async ({ messages }) => {
-      assert.equal(messages[0].content, 'FIXED_RULE');
-      assert.ok(messages.some(message => message.content === 'INPUT BEFORE_SCRIPT'));
+      assert.ok(messages.some(message => message.content === 'FIXED_RULE'));
+      assert.ok(expandedMessages(messages).some(message => message.content === 'INPUT BEFORE_SCRIPT'));
       assert.ok(messages.findIndex(message => message.content === 'SCRIPT_OUTPUT') > 0);
-      assert.doesNotMatch(JSON.stringify(messages), /tavern-context/);
+      assert.equal(messages.filter(message => message.content.includes('BEFORE_SCRIPT')).length, 1);
+      assert.doesNotMatch(JSON.stringify(messages), /AFTER_SCRIPT/);
       return { sections: { plan: '完成。' } };
     },
   });
@@ -72,7 +73,7 @@ test('table tool view retains initialization and SQL constraints while dropping 
   assert.ok(JSON.stringify(input).indexOf('IDENTITIES') < JSON.stringify(input).indexOf('ACTIVATED'));
 });
 
-test('protocol retries append corrections after the unchanged original request and schema', async () => {
+test('protocol repairs use a separate grounded request and retain the original schema', async () => {
   const requests = [];
   const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false };
   const call = makeModelCaller({ stream: async function* (options) {
@@ -83,8 +84,8 @@ test('protocol retries append corrections after the unchanged original request a
   await call({ agent: { provider: 'fixture', model: 'fixture' }, schema, retries: 1,
     messages: [{ role: 'system', content: 'FIXED_RULE' }, { role: 'user', content: 'CURRENT_INPUT' }] });
   const text = message => message.content.map(block => block.text ?? '').join('');
-  assert.match(text(requests[0].messages[0]), /结构化任务/);
-  assert.deepEqual(requests[1].messages.slice(0, -1).map(text), requests[0].messages.map(text));
-  assert.match(text(requests[1].messages.at(-1)), /上次结果未通过/);
+  assert.match(text(requests[0].messages[0]), /结构化数据任务/);
+  assert.ok(!requests[1].messages.some(message => /FIXED_RULE|CURRENT_INPUT/.test(text(message))));
+  assert.match(text(requests[1].messages.at(-1)), /candidate/);
   assert.deepEqual(requests[0].tools, requests[1].tools);
 });

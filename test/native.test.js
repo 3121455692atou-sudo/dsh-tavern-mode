@@ -13,6 +13,23 @@ import { EventEmitter } from 'node:events';
 import { defaultConfig, COMBINATION, PLAN, TABLE_UPDATE } from '../src/contracts.js';
 import { activateWorldbookWithEvents } from '../src/worldbook.js';
 import { makeModelCaller } from '../src/model.js';
+import { mapConcurrent } from '../src/pipeline.js';
+
+test('a failed dispatched task lets its already-running sibling complete', async () => {
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  let finished = false;
+  const run = new NativeRun({ callModel: async options => {
+    if (options.label === 'failed') throw new Error('one stage failed');
+    await gate; options.signal.throwIfAborted(); finished = true; return 'completed';
+  }, work: call => mapConcurrent(['failed', 'sibling', 'unscheduled'], 2, label => call({ stage: 'memory', label })) });
+  const { tasks } = await run.next(); assert.equal(tasks.length, 2);
+  const sibling = run.execute(tasks[1].id, 'memory', new AbortController().signal);
+  await assert.rejects(run.execute(tasks[0].id, 'memory', new AbortController().signal), /one stage failed/);
+  assert.equal(run.signal.aborted, false);
+  release(); assert.equal(await sibling, 'completed');
+  await run.completion; assert.ok(finished); assert.equal(run.tasks.size, 2);
+  await assert.rejects(run.next(), /one stage failed/);
+});
 
 test('Native orchestration waits for DSH tool dispatch and exposes each stage in dependency order', async () => {
   const calls = [];
@@ -85,14 +102,15 @@ test('Failed native attempts retain the rejected response and retry count indepe
   const { tasks } = await run.next();
   await assert.rejects(run.execute(tasks[0].id, 'advance', new AbortController().signal), /fewer than 100/);
   await run.completion;
-  assert.equal(calls, 4);
+  assert.equal(calls, 2);
   let records;
   await api({ method: 'GET' }, {}, '/model-attempts', {}, new URL('http://localhost?id=' + session.id), (_res, data) => { records = data; });
-  assert.equal(records.length, 4);
+  assert.equal(records.length, 2);
   const ordered = records.toSorted((a, b) => a.attempt - b.attempt);
-  assert.deepEqual(ordered.map(r => r.status), ['retrying', 'retrying', 'retrying', 'failed']);
+  assert.deepEqual(ordered.map(r => r.status), ['retrying', 'failed']);
+  assert.deepEqual(ordered.map(r => r.request.mode), ['initial', 'repair']);
   assert.ok(ordered.every(r => r.taskId === tasks[0].id && r.label === '索引' && r.provider === 'fixture'));
-  assert.equal(JSON.parse(ordered[3].response.toolCalls[0].arguments).content, '第4次错误返回');
+  assert.equal(JSON.parse(ordered[1].response.toolCalls[0].arguments).content, '第2次错误返回');
   await assert.rejects(store.session(session.id), { code: 'ENOENT' });
 });
 

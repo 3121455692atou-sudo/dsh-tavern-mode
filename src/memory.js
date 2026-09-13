@@ -9,7 +9,8 @@ const terms = value => [...segmenter.segment(String(value).normalize('NFKC').toL
 
 export function evidenceSources(messages) {
   const sources = [];
-  for (const message of messages) for (const quote of message.content.split(/\r?\n/)) {
+  for (const message of messages) for (const quote of (message.role === 'assistant'
+    ? message.content.replace(/<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi, '\n') : message.content).split(/\r?\n/)) {
     if (quote.trim()) sources.push({ id: `source-${sources.length + 1}`, messageId: message.id, quote });
   }
   return sources;
@@ -23,7 +24,11 @@ export function resolveEvidence(reference, sources) {
 
 export function resolveStateChanges(changes, current, sources) {
   return changes.map(({ op, target, value, evidence }) => {
-    const previous = target.id === undefined ? undefined : current.find(fact => fact.id === target.id);
+    // The exact subject/key already identifies an existing attribute in this
+    // character's state. Resolve it locally, as an UPDATE, without paying for
+    // another model call solely to copy its opaque id. Unknown explicit ids
+    // remain invalid and evidence/duplicate-update validation is unchanged.
+    const previous = target.id === undefined ? current.find(fact => fact.subject === target.subject && fact.key === target.key) : current.find(fact => fact.id === target.id);
     if (target.id !== undefined && !previous) throw new ProtocolError(`状态 target.id ${JSON.stringify(target.id)} 不是当前状态记录；请从 currentState/currentWorldState 中选择现有 id`);
     const { subject, key } = previous ?? target;
     return { op, subject, key, value, previousFactId: previous?.id ?? null, evidence: resolveEvidence(evidence, sources) };
