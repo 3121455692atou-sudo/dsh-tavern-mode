@@ -7,7 +7,7 @@ import { boundedStream } from './model-deadline.js';
 
 const toMessage = message => message.role === 'system' ? createSystemMessage(message.content, 'dsh-tavern-mode') : createMessage({ role: message.role, source: { kind: 'plugin', plugin: 'dsh-tavern-mode' }, content: [{ type: 'text', text: message.content }] });
 
-export function makeModelCaller(llm, { toolTimeoutMs = 180000, toolIdleMs = 60000 } = {}) {
+export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
   const audit = createRequestAuditor();
   return async ({ agent, messages, schema, signal, sessionId, stage, label, repairContext, onRequest, onText, onReasoning, onUsage, onAttempt, onChunk, retries = 3, validate }) => {
     if (!agent.provider || !agent.model) throw new Error('请先为 agent 选择提供方和模型');
@@ -70,7 +70,7 @@ export function makeModelCaller(llm, { toolTimeoutMs = 180000, toolIdleMs = 6000
           ...(error ? { error: { message: error.message, code: error.code ?? error.name, phase: error.phase } } : {}), response: structuredClone(response) });
       };
       try {
-        const stream = schema ? boundedStream(options => llm.stream(options), options, { totalMs: toolTimeoutMs, idleMs: toolIdleMs }) : llm.stream(options);
+        const stream = boundedStream(options => llm.stream(options), options, { idleMs: toolIdleMs });
         for await (const chunk of stream) {
           onChunk?.(chunk);
           if (chunk.type === 'text-delta') { response.text += chunk.text; onText?.(chunk.text); }

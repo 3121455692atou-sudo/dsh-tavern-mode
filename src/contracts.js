@@ -121,6 +121,16 @@ export function defaultConfig(route = {}) {
   return { playMode: 'agent', toolContextMode: 'focused', normalMaxInputTokens: 200000, agents: models, concurrency: 4, historyTurns: 12, recallCount: 8, recallBatchSize: 48, protocolRetries: 3, templateTimeout: 8000 };
 }
 
+export function completeConfig(...sources) {
+  const result = defaultConfig();
+  for (const source of sources) if (source != null) {
+    const agents = { ...result.agents };
+    for (const [stage, value] of Object.entries(source.agents ?? {})) agents[stage] = value && typeof value === 'object' && !Array.isArray(value) ? { ...agents[stage], ...value } : value;
+    Object.assign(result, source, { agents });
+  }
+  return result;
+}
+
 export function validateConfig(config) {
   config.playMode ??= 'agent';
   config.toolContextMode ??= 'focused';

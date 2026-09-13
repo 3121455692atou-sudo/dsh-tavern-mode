@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdir } from 'node:fs/promises';
 import { Store, readJson, atomicJson, safeId } from './storage.js';
 import { importPath, importBytes, importLegacyPrompts, identifyJson } from './imports.js';
-import { defaultConfig, validateConfig, validateProtocol, SCENE } from './contracts.js';
+import { defaultConfig, completeConfig, validateConfig, validateProtocol, SCENE } from './contracts.js';
 import { makeModelCaller } from './model.js';
 import { describeTables } from './tables.js';
 import { allRegex, assembleWritingPrompt, prepareWorldbook } from './prompts.js';
@@ -52,7 +52,7 @@ export async function apply(ctx, config = {}) {
 
   async function globalConfig() {
     const settings = await store.settings();
-    return { ...settings, config: settings.config ?? defaultConfig() };
+    return { ...settings, config: completeConfig(settings.config) };
   }
   const runtimeStorage = state => sharedAssets.snapshot(state);
   const sessionAssets = state => loadSessionAssets(store, state);
@@ -138,14 +138,14 @@ export async function apply(ctx, config = {}) {
       json(res, saved); return;
     }
     if (path === '/config') {
-      validateConfig(body.config);
       if (body.sessionId && !await ctx.tavernMode.ensure(body.sessionId)) {
         const settings = await ctx.tavernMode.draftSettings(body.sessionId);
-        await ctx.tavernMode.saveDraftSettings(body.sessionId, { ...settings, config: body.config });
+        const config = completeConfig(settings.config, record(body.config, '模型配置')); validateConfig(config);
+        await ctx.tavernMode.saveDraftSettings(body.sessionId, { ...settings, config });
         json(res, { ok: true }); return;
       }
-      if (body.sessionId) { json(res, { state: await editSession(body.sessionId, body.revision, state => { state.config = body.config; }) }); return; }
-      const settings = await store.settings(); await store.saveSettings({ ...settings, config: body.config });
+      if (body.sessionId) { json(res, { state: await editSession(body.sessionId, body.revision, state => { const config = completeConfig(state.config, record(body.config, '模型配置')); validateConfig(config); state.config = config; }) }); return; }
+      const settings = await store.settings(); const config = completeConfig(settings.config, record(body.config, '模型配置')); validateConfig(config); await store.saveSettings({ ...settings, config });
       json(res, { ok: true }); return;
     }
     if (path === '/session') {

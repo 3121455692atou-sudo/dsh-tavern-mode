@@ -409,6 +409,7 @@ export async function resumeStoryUpdates({ state, card, toolPreset = null, agent
     try {
       const result = await call(stage, input, schema, label, extras, override, validate);
       pending.results[key] = structuredClone(result);
+      if (pending.failures) delete pending.failures[key];
       await onProgress?.(state);
       return result;
     } catch (error) {

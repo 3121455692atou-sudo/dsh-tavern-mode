@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/storage.js';
@@ -91,4 +91,36 @@ test('checkpoint invalidates changed input, state, assets, route and schema; com
   await invoke(args); const n = count;
   await invoke(args, { ...options, agent: { model: 'two' } }); assert.equal(count, n + 1);
   await clearTurnCheckpoint(args.store, args.state.id); await invoke(args); assert.equal(count, n + 2);
+});
+
+test('explicit resume refuses changed inputs or a changed completed prompt without sending another model request', async t => {
+  const args = await fixture(t); let count = 0;
+  const original = await openTurnCheckpoint(args);
+  const request = { stage: 'advance', label: '推进', agent: { model: 'one' }, messages: [{ role: 'user', content: 'original' }] };
+  const model = async () => { count++; return 'saved'; };
+  await original.wrap(model)(request);
+  await assert.rejects(openTurnCheckpoint({ ...args, text: 'edited input', resume: true }), /无法安全复用/);
+  const resumed = await openTurnCheckpoint({ ...args, resume: true });
+  await assert.rejects(resumed.wrap(model)({ ...request, messages: [{ role: 'user', content: 'changed by callback' }] }), /避免重复请求/);
+  assert.equal(count, 1);
+});
+
+test('legacy frontend metadata cannot force completed requests to be billed again', async t => {
+  const args = await fixture(t); let paid = 0;
+  const options = { stage: 'advance', label: '前置', agent: {}, messages: [{ role: 'user', content: 'unchanged request' }] };
+  const model = async () => { paid++; return 'saved'; };
+  const first = await openTurnCheckpoint(args); await first.wrap(model)(options);
+  const path = join(args.store.sessionDir(args.state.id), 'turn-checkpoint.json');
+  const old = JSON.parse(await readFile(path, 'utf8')); delete old.version;
+  old.scope = 'legacy-scope-with-host-only-metadata';
+  for (const result of Object.values(old.results)) { delete result.stage; delete result.label; }
+  await writeFile(path, JSON.stringify(old));
+  let resume = (await openTurnCheckpoint({ ...args, resume: true })).wrap(model);
+  await assert.rejects(resume({ ...options, messages: [{ role: 'user', content: 'changed request' }] }), /避免重复计费/);
+  assert.equal(paid, 1);
+  resume = (await openTurnCheckpoint({ ...args, state: { ...args.state, nativeAnchorSeq: 100 }, resume: true })).wrap(model);
+  assert.equal(await resume(options), 'saved'); assert.equal(paid, 1);
+  await resume({ ...options, label: '失败步骤', messages: [{ role: 'user', content: 'unfinished' }] });
+  assert.equal(paid, 2);
+  assert.equal(JSON.parse(await readFile(path, 'utf8')).version, 2);
 });

@@ -932,6 +932,14 @@ async function dispatch(method, args) {
   }
   if (method === 'sync') { syncPayload(args); if (!payload.native) { rendering = rendering.then(renderChat); await rendering; } return true; }
   if (method === 'draft') { document.getElementById('send_textarea').value = args.text; return true; }
+  if (method === 'resume') {
+    // Restore the failed turn's draft without firing MESSAGE_SENT and changing
+    // its prompt variables/injections a second time.
+    running = true;
+    processedMessageId = undefined;
+    if (args.trigger !== 'continue') context.chat.push({ name: payload.state.userName, is_user: true, mes: args.text, extra: {} });
+    return { ...clone(generationSnapshot()), chat: clone(context.chat), injections: [] };
+  }
   if (method === 'prepare') {
     running = true;
     processedMessageId = undefined;

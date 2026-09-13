@@ -8,6 +8,8 @@ import { displaySegments } from './display.js';
 import { withoutLegacyBubble } from './speech-frame.js';
 import { ResourceLibrary } from './native-resources.jsx';
 import { createMessageActions } from './native-messages.jsx';
+import { createRecoveryNotice } from './native-recovery-ui.jsx';
+import { createOpening } from './native-opening.jsx';
 import { extractInteraction, interactionHtml } from './interaction.js';
 import { displayMessage, findMessageIndex } from './native-display.js';
 
@@ -19,6 +21,8 @@ export function apply(ctx) {
   const runtime = createBrowserRuntime(ctx);
   const Settings = createSettings(runtime);
   const MessageActions = createMessageActions(runtime);
+  const RecoveryNotice = createRecoveryNotice(runtime);
+  const Opening = createOpening(standaloneMessage);
   const style = document.createElement('style'); style.dataset.plugin = 'dsh-tavern-mode';
   style.textContent = `.tavern-settings{color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.6;min-width:0}.tavern-settings h2{font-size:20px;margin:0 0 18px}.tavern-submenu{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:10px;margin-bottom:18px}.tavern-settings button{color:inherit;font:inherit;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:transparent;padding:6px 10px;cursor:pointer}.tavern-settings button:hover,.tavern-submenu [aria-selected=true]{background:var(--dsw-alias-interactive-bg-hover)}.tavern-settings button:disabled{opacity:.5;cursor:default}.tavern-page{border:0;margin:0;padding:0;min-width:0}.tavern-settings label{display:flex;flex-direction:column;gap:6px;margin:12px 0}.tavern-settings input:not([type=checkbox]),.tavern-settings textarea,.tavern-settings select{font:inherit;color:inherit;background:var(--dsw-alias-fill-tsp-secondary);border:1px solid var(--dsw-alias-border-l1);border-radius:7px;padding:8px;width:100%;box-sizing:border-box}.tavern-settings select option{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary)}.tavern-settings textarea{resize:vertical}.tavern-settings summary{cursor:pointer;padding:9px 0}.tavern-settings details{border-bottom:1px solid var(--dsw-alias-border-l1);padding-bottom:8px}.tavern-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}.tavern-actions{display:flex;gap:8px;margin:8px 0}.tavern-save{margin:10px 0 18px}.tavern-caption{color:var(--dsw-alias-label-tertiary)}.tavern-error{color:var(--dsw-alias-state-error-primary)}.tavern-check{flex-direction:row!important;align-items:center}.tavern-table{overflow:auto;margin:14px 0}.tavern-table table{border-collapse:collapse;width:100%}.tavern-table td,.tavern-table th{border:1px solid var(--dsw-alias-border-l1);padding:6px;min-width:100px;text-align:left}.tavern-settings pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.tavern-native-component{display:block;width:100%;border:0;min-height:24px;margin:8px 0;background:transparent;color-scheme:inherit}.tavern-greeting{font-size:var(--dsh-content-font-size,14px);line-height:1.8;margin-bottom:20px}@media(max-width:560px){.tavern-grid{grid-template-columns:1fr}}`;
   style.textContent += `
@@ -28,6 +32,7 @@ export function apply(ctx) {
     .tavern-opening,.tavern-entry{box-sizing:border-box;width:min(var(--dsh-chat-content-width),calc(100% - 32px));margin:0 auto;padding:24px 0;min-width:0}
     .tavern-entry{flex:1;padding-top:clamp(24px,6vh,60px);padding-bottom:32px}
     .tavern-composer{position:relative;z-index:7;flex:none;padding-top:12px;background:var(--dsw-alias-bg-base)}
+    .tavern-recovery{box-sizing:border-box;width:min(var(--dsh-chat-content-width),calc(100% - 32px));margin:0 auto 10px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.tavern-recovery span{flex:1;min-width:180px}.tavern-recovery button{flex:none}.tavern-recovery p{width:100%;margin:0}
     .tavern-toolbar{box-sizing:border-box;width:min(var(--dsh-composer-card-max-width),calc(100% - 32px));margin:0 auto 6px;padding:0 8px;color:var(--dsw-alias-label-primary);font:13px/1.5 var(--dsw-font-family,system-ui)}
     .tavern-toolbar-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
     .tavern-toolbar-row>button,.tavern-toolbar-row>select{font:inherit;color:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;padding:4px 10px;cursor:pointer;min-height:30px}
@@ -118,6 +123,7 @@ export function apply(ctx) {
       if (hiddenNode(payload.state, props.node) || payload.state.deletedNativeMessageIds?.includes(props.node.id)) return null;
       const text = payload.state.nativeMessageOverrides?.[props.node.id] ?? props.node.data.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
       if (text === '/tavern-retry-updates') return <p className="tavern-caption">重试未完成的表格与记忆更新</p>;
+      if (text.startsWith('/tavern-resume ')) return <p className="tavern-caption">从失败步骤继续</p>;
       const attachments = props.node.data.content.filter(block => block.type !== 'text');
       const index = findMessageIndex(payload.state, props.node.id, text, 'user');
       const render = content => <Original {...props} node={{ ...props.node, data: { ...props.node.data, content } }} />;
@@ -170,35 +176,28 @@ export function apply(ctx) {
   function standaloneMessage(message, payload, index, sessionId) {
     return <MessageActions key={message.id} sessionId={sessionId} payload={payload} message={message} role={message.role} text={message.content}>{renderText(message.content, payload, index, sessionId, text => <MarkdownText text={text} labels={markdownLabels} />, message.role === 'user' ? 1 : 2)}</MessageActions>;
   }
-  function Opening({ sessionId, payload, blank }) {
-    const messages = payload.state.messages;
-    let start = messages.length;
-    while (start > 0 && messages[start - 1].scriptCreated) start--;
-    if (!blank && start === messages.length) return null;
-    return <div className="tavern-opening">{messages[0]?.greeting && blank && <div className="tavern-greeting">{standaloneMessage(messages[0], payload, 0, sessionId)}</div>}{messages.slice(start).map((message, offset) => standaloneMessage(message, payload, start + offset, sessionId))}</div>;
-  }
 
   ctx.slots.inject('conversation.input.dock', () => {
     const original = ctx.slots.entriesOfSlot('conversation.hero.agentPreset')[0];
     const Mode = original.component;
     return ctx.slots.register({ name: 'conversation.input.dock', id: 'tavern-toolbar', order: 20, locale: original.locale, inject: original.inject }, function Toolbar(props) {
       const preset = props.useProjection('agentPreset');
-      const { payload, notice } = usePayload(props.sessionId);
+      const { payload, notice, draftConfig } = usePayload(props.sessionId);
       const [modal, setModal] = useState('');
       if (preset !== 'tavern') return null;
       const buttons = runtime.controller(props.sessionId)?.buttons ?? [];
       return <div className="tavern-toolbar">
         <div className="tavern-toolbar-row">
           <Mode {...props} select={mode => runtime.changeMode(mode).catch(error => error.message)} />
-          <select aria-label="玩法" value={payload?.state?.config?.playMode ?? payload?.config?.playMode ?? 'agent'} onChange={event => {
+          <select aria-label="玩法" value={payload?.state?.config?.playMode ?? draftConfig?.playMode ?? 'agent'} onChange={event => {
             const playMode = event.target.value;
-            const config = { ...(payload?.state?.config ?? payload?.config), playMode };
+            const config = { playMode };
             api('/config', { config, sessionId: props.sessionId, ...(payload?.state?.revision != null ? { revision: payload.state.revision } : {}) }).then(() => runtime.refresh(props.sessionId, true)).catch(error => runtime.report(props.sessionId, error.message));
           }}><option value="agent">多 agent</option><option value="normal">普通</option></select>
           <button className="tavern-current-card" title={payload?.card.name ?? '选择角色卡'} onClick={() => setModal('cards')}>{payload?.card.name ?? '角色卡'}</button>
           <button onClick={() => setModal('resources')}>导入</button>
           <button onClick={() => setModal('resources')}>预设</button>
-          <button onClick={() => setModal('agents')}>{(payload?.state?.config?.playMode ?? payload?.config?.playMode) === 'normal' ? '最大输入与模型' : '多 agent'}</button>
+          <button onClick={() => setModal('agents')}>{(payload?.state?.config?.playMode ?? draftConfig?.playMode) === 'normal' ? '最大输入与模型' : '多 agent'}</button>
           <button onClick={() => runtime.script(props.sessionId, '台词框').catch(error => runtime.report(props.sessionId, error.message))}>台词框</button>
           {buttons.filter(button => button.name !== '台词框' && button.name !== '对话气泡').map(button => <button key={button.id} onClick={() => runtime.script(props.sessionId, button.id).catch(error => runtime.report(props.sessionId, error.message))}>{button.name}</button>)}
         </div>
@@ -238,11 +237,12 @@ export function apply(ctx) {
         {props.renderSlot('conversation.session.header', {})}
         <div className="tavern-scroll" data-conversation-scroll="" ref={scroll}>
           {!payload ? <div className="tavern-entry">{error && <p role="alert" className="tavern-error">{error}</p>}{loaded || error ? <ResourceLibrary runtime={runtime} sessionId={props.sessionId} /> : <p>正在读取酒馆…</p>}</div> : <>
-            {session?.blank ? <Opening sessionId={props.sessionId} payload={payload} blank /> : <>{props.renderSlot('conversation.session', {})}<Opening sessionId={props.sessionId} payload={payload} /></>}
+            <Opening sessionId={props.sessionId} payload={payload} greetingOnly />
+            {!session?.blank && props.renderSlot('conversation.session', {})}<Opening sessionId={props.sessionId} payload={payload} />
             {error && <div className="tavern-opening"><p className="tavern-error" role="alert">{error}</p><button onClick={() => runtime.refresh(props.sessionId, true)}>重新加载前端</button></div>}
           </>}
         </div>
-        <div className="tavern-composer" data-composer-seat="" ref={composer}>{props.renderSlotChain('conversation.composer', { sessionId: props.sessionId, session, pendingInteraction }, { fallback: bar, overlay: true })}</div>
+        <div className="tavern-composer" data-composer-seat="" ref={composer}><RecoveryNotice sessionId={props.sessionId} payload={payload} ready={ready} />{props.renderSlotChain('conversation.composer', { sessionId: props.sessionId, session, pendingInteraction }, { fallback: bar, overlay: true })}</div>
       </div>;
     }
     function Conversation(props) {
