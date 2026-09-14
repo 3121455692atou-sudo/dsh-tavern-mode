@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assembleWritingPrompt } from '../src/prompts.js';
+import { assembleWritingPrompt as assemble } from '../src/prompts.js';
 import { normalizeWorldbook, activateWorldbookWithEvents } from '../src/worldbook.js';
 import { defaultConfig } from '../src/contracts.js';
 import { applyRegex } from '../src/macros.js';
+
+// Exercise source transformations before the final prose-length instruction.
+// That instruction is tested through both full pipelines in output-policy.test.
+const assembleWritingPrompt = options => assemble({ ...options, deferLength: true });
 
 const state = () => ({ id: 'writer-regex', userName: 'Reader', config: defaultConfig(), messages: [{ role: 'user', content: 'Continue.' }], variables: {}, globalVariables: {}, tables: {}, renderMode: 'text' });
 const card = { name: 'Actor', extensions: {} };

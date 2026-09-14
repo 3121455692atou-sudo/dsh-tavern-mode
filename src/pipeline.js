@@ -14,6 +14,7 @@ import { legacyPromptMessages } from './presets.js';
 import { hasAdvanceTasks, hasSummarySelection, runAdvancePreset } from './advance.js';
 import { summaryIndex } from './summary-index.js';
 import { renderTemplates } from './templates.js';
+import { withWritingLength } from './writing-length.js';
 import { effectiveMessages, memoryCandidates, currentFacts, validateStateChanges, recordStateChanges, validateEvidence, evidenceSources, resolveEvidence, resolveStateChanges } from './memory.js';
 
 async function renderedToolPreset(preset, { stage, explicit, mode, state, card, signal, prompt }) {
@@ -171,13 +172,12 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
     }
     const writingPreset = presetFor('write');
     const recallContext = `召回资料（保留角色归属及经历时间）：\n${JSON.stringify(recallBundle(recalls))}\n当前状态优先于较早的经历；角色知识以各自 currentState 和经历为依据。`;
-    const writing = await assembleWritingPrompt({ state, card, preset: writingPreset, worldbook, plan, summarySelectionEnabled, regex, extraContext: normal ? '' : importedFlow ? recallContext : `本轮场景与角色视角：\n${JSON.stringify(combined)}\n${recallContext}\n最后确认的世界状态：\n${JSON.stringify(worldState.map(fact => factView(fact)))}\n相关世界经历：\n${JSON.stringify(worldEpisodes.map(episode => episodeView(episode)))}`, trigger, signal: runSignal, scanWorldbook, deferBudget: true });
+    const writing = await assembleWritingPrompt({ state, card, preset: writingPreset, worldbook, plan, summarySelectionEnabled, regex, extraContext: normal ? '' : importedFlow ? recallContext : `本轮场景与角色视角：\n${JSON.stringify(combined)}\n${recallContext}\n最后确认的世界状态：\n${JSON.stringify(worldState.map(fact => factView(fact)))}\n相关世界经历：\n${JSON.stringify(worldEpisodes.map(episode => episodeView(episode)))}`, trigger, signal: runSignal, scanWorldbook, deferBudget: true, deferLength: true });
     if (advance) writing.messages.push({ role: 'system', content: JSON.stringify({ summaryRecords: advance.summaryRecords }) });
     if (advance?.injection) writing.messages.push({ role: 'system', content: advance.injection });
     const writer = {
       ...config.agents.write,
       temperature: config.agents.write.temperature ?? writingPreset?.temperature ?? 0.9,
-      maxTokens: config.agents.write.maxTokens,
       presetReasoningEffort: writingPreset?.reasoning_effort && writingPreset.reasoning_effort !== 'auto' ? writingPreset.reasoning_effort : '',
     };
     if (beforeWrite) {
@@ -190,6 +190,7 @@ export async function runTurn({ state: inputState, card, preset, toolPreset = nu
       // Helper presentation edits are kept as metadata; the canonical authored text stays reviewable.
       if (Array.isArray(updated.chat)) state.helperChat = updated.chat.map((message, index) => ({ ...message, tavernMessageId: state.messages[index]?.id }));
     }
+    writing.messages = withWritingLength(writing.messages, config);
     if (normal) {
       const history = new Map();
       for (const message of writing.historyMessages) { const key = JSON.stringify(message); history.set(key, (history.get(key) ?? 0) + 1); }

@@ -4,13 +4,13 @@ import { defaultConfig, COMBINATION, PLAN, TABLE_UPDATE } from '../src/contracts
 import { makeModelCaller } from '../src/model.js';
 import { runTurn } from '../src/pipeline.js';
 
-test('Unconfigured agents leave output limits to the provider, while explicit limits reach the request', async () => {
+test('All agents omit output limits, including legacy explicit combined limits', async () => {
   const calls = [];
   const call = makeModelCaller({ stream: async function* (options) { calls.push(options); yield { type: 'text-delta', text: '完成' }; yield { type: 'finish', reason: { kind: 'stop' } }; } });
   for (const agent of Object.values(defaultConfig({ provider: 'fixture', model: 'fixture' }).agents)) await call({ agent, messages: [{ role: 'user', content: '检查' }] });
   assert.ok(calls.every(request => !Object.hasOwn(request, 'maxTokens')));
   await call({ agent: { provider: 'fixture', model: 'fixture', maxTokens: 23456 }, messages: [{ role: 'user', content: '检查' }] });
-  assert.equal(calls.at(-1).maxTokens, 23456);
+  assert.ok(!Object.hasOwn(calls.at(-1), 'maxTokens'));
 });
 
 test('Writing does not inherit a preset output token limit', async () => {

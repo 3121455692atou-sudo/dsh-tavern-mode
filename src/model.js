@@ -4,6 +4,7 @@ import { decodeProtocol, ProtocolError } from './contracts.js';
 import { requiredShape, repairMessages } from './protocol-repair.js';
 import { createRequestAuditor } from './request-audit.js';
 import { boundedStream } from './model-deadline.js';
+import { withoutOutputLimit } from './output-policy.js';
 
 const toMessage = message => message.role === 'system' ? createSystemMessage(message.content, 'dsh-tavern-mode') : createMessage({ role: message.role, source: { kind: 'plugin', plugin: 'dsh-tavern-mode' }, content: [{ type: 'text', text: message.content }] });
 
@@ -50,12 +51,13 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
         ...(sessionId ? { sessionId } : {}),
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(agent.temperature != null ? { temperature: agent.temperature } : {}),
-        ...(agent.maxTokens != null ? { maxTokens: agent.maxTokens } : {}),
+        // Legacy maxTokens was a combined thinking + answer cap. Never use
+        // it as a prose budget; the prose range is a prompt instruction only.
         ...(agent.stop?.length ? { stop: agent.stop } : {}),
         ...(schema && mode === 'tool' ? { tools: [{ name: 'tavern_result', description: '返回本次结构化任务结果', parameters: schema }] } : {}),
       };
       const response = { text: '', toolCalls: [], finish: null };
-      const blocks = new Map(), usage = [];
+      const blocks = new Map(), usage = [], wireOutputPolicy = [];
       const startedAt = new Date().toISOString();
       const report = async (status, kind, error, extra = {}) => {
         response.toolCalls = [...blocks.values()].filter(block => block.type === 'tool-call');
@@ -65,21 +67,24 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
           // Exact plugin-to-SDK payload; deliberately excludes provider secrets.
           input: { format: 'dsh-sdk-input-v1', messages: plain, ...(schema ? { schema } : {}),
             agent: { provider: agent.provider, model: agent.model, protocol: mode, reasoningEffort: reasoningEffort ?? null,
-              temperature: agent.temperature, maxTokens: agent.maxTokens, stop: agent.stop } },
+              temperature: agent.temperature, maxTokens: null, stop: agent.stop },
+            outputPolicy: { pluginLimit: 'none', wire: wireOutputPolicy } },
           usage, ...extra,
           ...(error ? { error: { message: error.message, code: error.code ?? error.name, phase: error.phase } } : {}), response: structuredClone(response) });
       };
       try {
-        const stream = boundedStream(options => llm.stream(options), options, { idleMs: toolIdleMs });
-        for await (const chunk of stream) {
-          onChunk?.(chunk);
-          if (chunk.type === 'text-delta') { response.text += chunk.text; onText?.(chunk.text); }
-          else if (chunk.type === 'reasoning-delta') { const block = blocks.get(chunk.index) ?? { type: 'reasoning', text: '' }; block.text += chunk.text; blocks.set(chunk.index, block); }
-          else if (chunk.type === 'tool-call-delta') { const block = blocks.get(chunk.index) ?? { type: 'tool-call', arguments: '' }; if (chunk.id) block.id = chunk.id; if (chunk.name) block.name = chunk.name; block.arguments += chunk.argumentsDelta ?? ''; blocks.set(chunk.index, block); }
-          else if (chunk.type === 'block-end') blocks.set(chunk.index, chunk.block);
-          else if (chunk.type === 'usage') { usage.push(chunk.usage); onUsage?.(chunk.usage); }
-          else if (chunk.type === 'finish') response.finish = chunk.reason;
-        }
+        await withoutOutputLimit(async () => {
+          const stream = boundedStream(options => llm.stream(options), options, { idleMs: toolIdleMs });
+          for await (const chunk of stream) {
+            onChunk?.(chunk);
+            if (chunk.type === 'text-delta') { response.text += chunk.text; onText?.(chunk.text); }
+            else if (chunk.type === 'reasoning-delta') { const block = blocks.get(chunk.index) ?? { type: 'reasoning', text: '' }; block.text += chunk.text; blocks.set(chunk.index, block); }
+            else if (chunk.type === 'tool-call-delta') { const block = blocks.get(chunk.index) ?? { type: 'tool-call', arguments: '' }; if (chunk.id) block.id = chunk.id; if (chunk.name) block.name = chunk.name; block.arguments += chunk.argumentsDelta ?? ''; blocks.set(chunk.index, block); }
+            else if (chunk.type === 'block-end') blocks.set(chunk.index, chunk.block);
+            else if (chunk.type === 'usage') { usage.push(chunk.usage); onUsage?.(chunk.usage); }
+            else if (chunk.type === 'finish') response.finish = chunk.reason;
+          }
+        }, policy => wireOutputPolicy.push(policy));
         if (signal?.aborted) throw signal.reason ?? new Error('生成已取消');
         if (!response.finish) throw new LlmError('模型流未正常结束', 'STREAM_CLOSED');
         if (response.finish.kind === 'error' || response.finish.kind === 'aborted') {
@@ -116,7 +121,7 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
       let value, normalization;
       try {
         if (['length', 'max-tokens', 'max_tokens', 'maxTokens'].includes(response.finish.kind)) {
-          const error = new ProtocolError(`模型耗尽输出额度（${usage.reduce((sum, item) => sum + (item.outputTokens ?? 0), 0)} token），结构化结果未完成；原始回复已保留`);
+          const error = new ProtocolError('上游服务返回 length，表示触及服务商的输出或上下文限制；插件未按字数或 token 数中断。结构化结果未完成，原始回复已保留，可从失败步骤继续。');
           error.phase = 'truncated'; throw error;
         }
         if (['refusal', 'content_filter', 'safety'].includes(response.finish.kind)) {
