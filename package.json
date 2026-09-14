@@ -1,6 +1,6 @@
 {
   "name": "dsh-tavern-mode",
-  "version": "0.4.2-rc.8",
+  "version": "0.4.2-rc.9",
   "description": "DSH 酒馆模式：角色卡、预设、前端、独立角色记忆与多 agent 剧情",
   "type": "module",
   "main": "./src/index.js",
@@ -94,7 +94,8 @@
     "REPAIR_RC4.zh-CN.md",
     "REPAIR_RC6.zh-CN.md",
     "REPAIR_RC7.zh-CN.md",
-    "REPAIR_RC8.zh-CN.md"
+    "REPAIR_RC8.zh-CN.md",
+    "REPAIR_RC9.zh-CN.md"
   ],
   "publishConfig": {
     "access": "public"
