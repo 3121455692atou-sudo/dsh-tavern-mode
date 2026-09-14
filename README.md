@@ -1,6 +1,6 @@
 # DSH 酒馆模式
 
-> **当前预发布：0.4.2-rc.9**。运行代码与 rc.8 相同（自动纠错次数按设置执行）；本版修正固定链接的安装与更新命令，更新时会重新下载最新安装包。详见 [更新说明](REPAIR_RC9.zh-CN.md) 和 [发布页面](https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/tag/v0.4.2-rc.9)。
+> **当前预发布：0.4.2-rc.10**。运行代码与 rc.8 相同（自动纠错次数按设置执行）；本版修正更新方式：pnpm 默认把固定链接的已装包锁死，更新时先移除再安装。详见 [更新说明](REPAIR_RC10.zh-CN.md) 和 [发布页面](https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/tag/v0.4.2-rc.10)。
 
 在 DeepSeek Harness 中导入 SillyTavern 角色卡、预设和世界书，使用原生聊天界面进行互动写作。
 
@@ -34,20 +34,27 @@ pnpm --version
 npm install -g pnpm@11.21.0
 ```
 
-初次安装和更新都使用同一条命令：
+初次安装：
 
 ```bash
-dsh plugin --profile web add --allow-build=esbuild --config.prefer-frozen-lockfile=false "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
+dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
 ```
 
-这个固定链接会更新为当前发布包；路径与文件名保留 `0.4.0`，包内版本当前为 `0.4.2-rc.9`。需要固定具体版本时，使用对应发布页面中的版本专属下载链接。
+更新（固定链接不变，先移除旧安装再安装）：
 
-安装或升级前先停止正在运行的 `dsh web`。已有插件直接执行同一条 add 命令，无需卸载。安装后重新启动 `dsh web` 并刷新已打开的页面，在输入框上方的模式菜单选择「酒馆模式」，再导入自己的角色卡。发布包已经包含前端构建产物。安装参数 `--allow-build=esbuild` 用于安装脚本编译器，供 HTML 模块加载和酒馆助手更新使用；`--config.prefer-frozen-lockfile=false` 让 pnpm 在更新时重新解析并下载固定链接的最新包（pnpm 默认复用锁文件中的旧包，替换安装包后仍会停留在旧版本）。
+```bash
+dsh plugin --profile web remove dsh-tavern-mode
+dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
+```
+
+这个固定链接会更新为当前发布包；路径与文件名保留 `0.4.0`，包内版本当前为 `0.4.2-rc.10`。需要固定具体版本时，使用对应发布页面中的版本专属下载链接。
+
+安装或升级前先停止正在运行的 `dsh web`。已有插件更新时必须先执行 remove：pnpm 会把固定链接的已装包连同校验值记入锁文件，直接重新 add 不会重新下载被替换的安装包（`--force` 和 update 按 pnpm 的设计也不会绕过），只有移除后重新安装才会获取最新包。安装/更新后重新启动 `dsh web` 并刷新已打开的页面，在输入框上方的模式菜单选择「酒馆模式」，再导入自己的角色卡。发布包已经包含前端构建产物。安装参数 `--allow-build=esbuild` 用于安装脚本编译器，供 HTML 模块加载和酒馆助手更新使用。
 
 使用 npx 启动 dsh 时：
 
 ```bash
-npx @deepseek-ai/dsh@0.1.5-rc.1 plugin --profile web add --allow-build=esbuild --config.prefer-frozen-lockfile=false "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
+npx @deepseek-ai/dsh@0.1.5-rc.1 plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
 npx @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 

@@ -26,11 +26,11 @@
 停止 `dsh web` 后执行，完成后重新启动并刷新页面：
 
 ```bash
-dsh plugin --profile web add --allow-build=esbuild --config.prefer-frozen-lockfile=false "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
+dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
 ```
 
 固定链接的路径和文件名保留 `0.4.0`，包内版本为 `0.4.2-rc.8`。本版也提供独立下载地址：
 
 ```bash
-dsh plugin --profile web add --allow-build=esbuild --config.prefer-frozen-lockfile=false "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.2-rc.8/dsh-tavern-mode-0.4.2-rc.8.tgz"
+dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.2-rc.8/dsh-tavern-mode-0.4.2-rc.8.tgz"
 ```
