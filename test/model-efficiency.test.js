@@ -95,7 +95,7 @@ test('partial writer output is not replayed after a transport error', async () =
   assert.equal(count, 1); assert.deepEqual(chunks, ['Partial prose.']);
 });
 
-test('writer content, reasoning, explicit token cap, sampling and usage stay unchanged', async () => {
+test('writer content, reasoning, sampling and usage stay unchanged while legacy caps are omitted', async () => {
   const prose = '完整正文。\n😀', reasoning = '核对人物与时间。';
   const usage = { inputTokens: 12, outputTokens: 8, cacheReadTokens: 100, totalTokens: 120 };
   const { caller, requests } = make([{ text: prose, blocks: [{ type: 'reasoning', text: reasoning }], usage }]);
@@ -104,7 +104,7 @@ test('writer content, reasoning, explicit token cap, sampling and usage stay unc
   const output = await caller({ agent: { ...agent, reasoningEffort: 'high', temperature: .9, maxTokens: 6000 }, sessionId: 'stable-session', messages: original,
     onReasoning: r => { savedReasoning = r; }, onUsage: u => seenUsage.push(u), onRequest: r => seenAudit.push(r) });
   assert.equal(output, prose); assert.equal(savedReasoning, reasoning); assert.deepEqual(seenUsage, [usage]);
-  assert.equal(requests[0].reasoningEffort, 'high'); assert.equal(requests[0].maxTokens, 6000); assert.equal(requests[0].temperature, .9); assert.equal(requests[0].sessionId, 'stable-session');
+  assert.equal(requests[0].reasoningEffort, 'high'); assert.ok(!Object.hasOwn(requests[0], 'maxTokens')); assert.equal(requests[0].temperature, .9); assert.equal(requests[0].sessionId, 'stable-session');
   assert.deepEqual(requests[0].messages.map(m => ({ role: m.role, content: m.content[0].text })), original);
   assert.equal(seenAudit[0].kind, 'local-input-audit-not-provider-cache');
 });

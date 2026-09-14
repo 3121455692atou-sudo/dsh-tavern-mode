@@ -21,7 +21,7 @@ test('normal writer keeps history without summary and truncates oldest text to i
   const input = state('normal');
   const original = await assembleWritingPrompt({ state: input, card, worldbook: [] });
   assert.deepEqual(original.messages.filter(m => m.role !== 'system'), input.messages);
-  input.config.normalMaxInputTokens = 70;
+  input.config.normalMaxInputTokens = 250;
   input.messages.unshift({ role: 'assistant', content: '很早的历史'.repeat(200) });
   const limited = await assembleWritingPrompt({ state: input, card, worldbook: [] });
   assert.ok(!limited.messages.some(m => m.content.includes('很早的历史'.repeat(100))));
@@ -52,13 +52,13 @@ test('fixed writing instructions precede changing worldbook and history in both 
   }
 });
 test('normal mode enforces the budget after frontend prompt additions without calling agents', async () => {
-  const input = state('normal'); input.config.normalMaxInputTokens = 100;
+  const input = state('normal'); input.config.normalMaxInputTokens = 250;
   input.messages = [{role:'user',content:'继续'}, {role:'assistant',content:'旧正文'.repeat(200)}];
   let calls = 0;
   await runTurn({ state: input, card, text: '继续',
     beforeWrite: async value => ({ ...value, messages: [...value.messages,{role:'system',content:'前端追加的格式要求'.repeat(3)}] }),
     callModel: async ({ stage, messages }) => {
-      calls++; assert.equal(stage,'write'); assert.ok(inputTokens(messages) <= 100);
+      calls++; assert.equal(stage,'write'); assert.ok(inputTokens(messages) <= 250);
       assert.ok(messages.some(message => message.role === 'user' && message.content === '继续'));
       assert.ok(messages.some(message => message.content.includes('前端追加的格式要求')));
       return '下一段正文。';

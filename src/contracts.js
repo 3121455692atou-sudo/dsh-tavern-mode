@@ -1,5 +1,6 @@
 import Ajv from 'ajv';
 import { parseResultText, normalizeStringArrays } from './protocol-repair.js';
+import { DEFAULT_WRITING_LENGTH } from './writing-length.js';
 
 const ajv = new Ajv({ allErrors: true, strict: true, allowUnionTypes: true });
 const text = { type: 'string' };
@@ -118,7 +119,7 @@ export function defaultConfig(route = {}) {
   for (const key of ['recall', 'combine', 'advance', 'write', 'memory', 'table']) {
     models[key] = { provider: route.provider ?? '', model: route.model ?? '', reasoningEffort: '', temperature: key === 'write' ? null : 0.5, maxTokens: null, protocol: 'tool', prompt: '', presetId: '' };
   }
-  return { playMode: 'agent', toolContextMode: 'focused', normalMaxInputTokens: 200000, agents: models, concurrency: 4, historyTurns: 12, recallCount: 8, recallBatchSize: 48, protocolRetries: 3, templateTimeout: 8000 };
+  return { playMode: 'agent', toolContextMode: 'focused', normalMaxInputTokens: 200000, writingMinChars: DEFAULT_WRITING_LENGTH.min, writingMaxChars: DEFAULT_WRITING_LENGTH.max, agents: models, concurrency: 4, historyTurns: 12, recallCount: 8, recallBatchSize: 48, protocolRetries: 3, templateTimeout: 8000 };
 }
 
 export function completeConfig(...sources) {
@@ -135,11 +136,15 @@ export function validateConfig(config) {
   config.playMode ??= 'agent';
   config.toolContextMode ??= 'focused';
   config.normalMaxInputTokens ??= 200000;
+  config.writingMinChars ??= DEFAULT_WRITING_LENGTH.min;
+  config.writingMaxChars ??= DEFAULT_WRITING_LENGTH.max;
   for (const key of ['recall', 'combine', 'advance', 'write', 'memory', 'table']) if (config.agents?.[key]) config.agents[key].presetId ??= '';
   const properties = {
     playMode: { type: 'string', enum: ['agent', 'normal'] },
     toolContextMode: { type: 'string', enum: ['focused', 'full'] },
     normalMaxInputTokens: { type: 'integer', minimum: 1 },
+    writingMinChars: { type: 'integer', minimum: 1 },
+    writingMaxChars: { type: 'integer', minimum: 1 },
     agents: object(Object.fromEntries(['recall', 'combine', 'advance', 'write', 'memory', 'table'].map(key => [key, object({
       provider: text, model: text, reasoningEffort: text, temperature: { type: ['number', 'null'], minimum: 0, maximum: 2 },
       maxTokens: { type: ['integer', 'null'], minimum: 1, maximum: 1000000 }, protocol: { type: 'string', enum: ['tool', 'json'] }, prompt: text, presetId: text,
@@ -148,5 +153,7 @@ export function validateConfig(config) {
     recallCount: { type: 'integer', minimum: 1, maximum: 100 }, recallBatchSize: { type: 'integer', minimum: 1, maximum: 1000 },
     protocolRetries: { type: 'integer', minimum: 0, maximum: 3 }, templateTimeout: { type: 'integer', minimum: 1000, maximum: 30000 },
   };
-  return validateProtocol(config, object(properties));
+  validateProtocol(config, object(properties));
+  if (config.writingMinChars > config.writingMaxChars) throw new ProtocolError('正文目标字数的下限不能大于上限');
+  return config;
 }

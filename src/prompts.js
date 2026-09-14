@@ -6,6 +6,7 @@ import { allRegex, applyRegex, macroEnvironment } from './macros.js';
 import { effectiveMessages } from './memory-state.js';
 import { interactionInstruction } from './interaction.js';
 import { staticText, staticEntry, stableFirst, trimHistory } from './prompt-context.js';
+import { withWritingLength } from './writing-length.js';
 export { allRegex } from './macros.js';
 
 export function isTableFillEntry(entry) {
@@ -77,7 +78,7 @@ function insertDepth(history, injections) {
   return result;
 }
 
-export async function assembleWritingPrompt({ state, card, preset, worldbook, plan, summarySelectionEnabled = false, forcedWorldIds = [], regex = [], extraContext = '', trigger = 'normal', signal, scanWorldbook, deferBudget = false }) {
+export async function assembleWritingPrompt({ state, card, preset, worldbook, plan, summarySelectionEnabled = false, forcedWorldIds = [], regex = [], extraContext = '', trigger = 'normal', signal, scanWorldbook, deferBudget = false, deferLength = false }) {
   const messagesForPrompt = effectiveMessages(state).filter(message => !message.hidden);
   const normal = (state.config.playMode ?? 'agent') === 'normal';
   const previous = messagesForPrompt.findLastIndex(message => message.role === 'assistant' && !message.greeting);
@@ -152,6 +153,7 @@ export async function assembleWritingPrompt({ state, card, preset, worldbook, pl
   messages = messages.map((message, index) => ({ ...message, content: rendered.texts[index] })).filter(message => message.content.trim());
   const fixed = message => message.cacheStatic === true;
   messages = [...messages.filter(fixed), ...messages.filter(message => !fixed(message))];
+  if (!deferLength) messages = withWritingLength(messages, state.config);
   if (normal && !deferBudget) messages = trimHistory(messages, state.config.normalMaxInputTokens ?? 200000);
   const historyMessages = messages.filter(message => message.history).map(({ role, content }) => ({ role, content }));
   messages = messages.map(({ role, content }) => ({ role, content }));
