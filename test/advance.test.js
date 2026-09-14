@@ -86,21 +86,21 @@ test('Advance task context zero excludes history and missing task minimum inheri
   await assert.rejects(runAdvancePreset({ ...fixture({ minLength: undefined }, { minLength: 100 }), callModel: async () => ({ sections: { recall: 'ABCDEF' }, selectedRecords: [] }) }), /内容长度不足/);
 });
 
-test('Legacy retry setting permits only one compact repair and records both attempts', async () => {
+test('Advance presets use all configured repairs instead of the imported retry limit', async () => {
   const requests = [], attempts = [];
   const call = makeModelCaller({ async *stream(options) {
     requests.push(options);
-    yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: JSON.stringify(requests.length < 2 ? { wrong: requests.length } : { sections: { recall: 'AM0001' }, selectedRecords: [] }) } };
+    yield { type: 'block-end', index: 0, block: { type: 'tool-call', name: 'tavern_result', arguments: JSON.stringify(requests.length < 4 ? { wrong: requests.length } : { sections: { recall: 'AM0001' }, selectedRecords: [] }) } };
     yield { type: 'finish', reason: { kind: 'tool-calls' } };
   } });
   const args = fixture({ maxRetries: 1 });
   assert.equal(args.state.config.protocolRetries, 3);
   const result = await runAdvancePreset({ ...args, callModel: options => call({ ...options, onAttempt: record => attempts.push(record) }) });
   assert.equal(result.results[0].content, '<recall>AM0001</recall>');
-  assert.equal(requests.length, 2);
-  assert.equal(attempts.length, 2);
-  assert.deepEqual(attempts.map(a => a.status), ['retrying', 'succeeded']);
-  assert.deepEqual(attempts.map(a => a.attempt), [1, 2]);
+  assert.equal(requests.length, 4);
+  assert.equal(attempts.length, 4);
+  assert.deepEqual(attempts.map(a => a.status), ['retrying', 'retrying', 'retrying', 'succeeded']);
+  assert.deepEqual(attempts.map(a => a.attempt), [1, 2, 3, 4]);
   assert.equal(JSON.parse(attempts[0].response.toolCalls[0].arguments).wrong, 1);
   assert.match(JSON.stringify(requests[1].messages), /candidate/);
 });

@@ -30,7 +30,7 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
     const retryPolicy = llm.providerRetryPolicy?.(agent.provider) ?? resolveRetryPolicy(undefined, 'tavern.model');
     // Even provider "always" must have a finite ceiling.
     const transportLimit = Number.isFinite(retryPolicy.maxRetries) ? Math.max(0, retryPolicy.maxRetries) : 3;
-    let currentMessages = messages, repairUsed = false, transportRetries = 0, requestCount = 0;
+    let currentMessages = messages, repairCount = 0, transportRetries = 0, requestCount = 0;
     while (true) {
       signal?.throwIfAborted(); requestCount++;
       const plain = currentMessages.map(({ role, content }) => ({ role, content }));
@@ -40,8 +40,8 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
         if (plain[0]?.role === 'system') plain[0] = { role: 'system', content: `${contract}\n\n${plain[0].content}` };
         else plain.unshift({ role: 'system', content: contract });
       }
-      const requestInfo = { attempt: requestCount, mode: repairUsed ? 'repair' : 'initial', reasoningEffort: reasoningEffort ?? null,
-        ...audit(plain, schema, { sessionId, provider: agent.provider, model: agent.model, stage, label, mode: repairUsed ? 'repair' : 'initial' }) };
+      const requestInfo = { attempt: requestCount, mode: repairCount ? 'repair' : 'initial', reasoningEffort: reasoningEffort ?? null,
+        ...audit(plain, schema, { sessionId, provider: agent.provider, model: agent.model, stage, label, mode: repairCount ? 'repair' : 'initial' }) };
       onRequest?.(requestInfo);
       const options = {
         provider: agent.provider, model: agent.model, messages: plain.map(toMessage), signal,
@@ -135,13 +135,13 @@ export function makeModelCaller(llm, { toolIdleMs = 60000 } = {}) {
         const truncated = ['length', 'max-tokens', 'max_tokens', 'maxTokens'].includes(response.finish.kind);
         // No blind regeneration of ordinary prose, refusal, semantic errors with
         // no grounding, or a truncated result at the same output limit.
-        const canRepair = error instanceof ProtocolError && retries > 0 && !repairUsed && !truncated
+        const canRepair = error instanceof ProtocolError && repairCount < retries && !truncated
           && error.phase !== 'unstructured' && candidate !== undefined
           && (error.phase === 'schema' || error.phase === 'decode' || repairContext !== undefined);
         if (!canRepair) { await report('failed', 'protocol', error); throw error; }
         await report('retrying', 'protocol', error);
         currentMessages = repairMessages({ candidate, error, context: repairContext });
-        repairUsed = true; continue;
+        repairCount++; continue;
       }
       await report('succeeded', normalization ? 'normalized' : 'response', undefined, normalization ? { normalization } : {});
       return value;

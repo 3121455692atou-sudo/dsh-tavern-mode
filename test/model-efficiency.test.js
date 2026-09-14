@@ -52,17 +52,69 @@ test('string-array errors are repaired locally with evidence and content preserv
   assert.equal(requests.length, 1); assert.equal(attempts[0].normalization.changes.length, 2);
 });
 
-test('invalid repaired output is rejected; no repeated large or small loops', async () => {
-  const { caller, requests } = make([tool({}), tool({})]);
-  await assert.rejects(caller({ agent, schema, messages: [{ role: 'user', content: 'GROUNDING' }], retries: 3 }), ProtocolError);
-  assert.equal(requests.length, 2);
+for (const retries of [0, 1, 2, 3]) test(`invalid output stops after the initial request plus ${retries} configured repairs`, async () => {
+  const candidates = Array.from({ length: retries + 1 }, (_, index) => ({ invalidAttempt: index + 1 }));
+  const usage = { inputTokens: 10, outputTokens: 2, totalTokens: 12 };
+  const { caller, requests } = make(candidates.map(value => ({ ...tool(value), usage })));
+  const attempts = [], charged = [], context = { allowed: true };
+  await assert.rejects(caller({ agent, schema, messages: [{ role: 'user', content: 'ORIGINAL_LARGE_CONTEXT'.repeat(1000) }], repairContext: context, retries,
+    onAttempt: record => attempts.push(record), onUsage: value => charged.push(value) }), ProtocolError);
+  assert.equal(requests.length, retries + 1);
+  assert.deepEqual(attempts.map(record => record.attempt), candidates.map((_, index) => index + 1));
+  assert.deepEqual(attempts.map(record => record.status), [...Array(retries).fill('retrying'), 'failed']);
+  assert.deepEqual(attempts.map(record => record.request.mode), ['initial', ...Array(retries).fill('repair')]);
+  assert.ok(attempts.every(record => record.protocolRetries === retries));
+  assert.equal(charged.reduce((sum, value) => sum + value.totalTokens, 0), (retries + 1) * 12);
+  for (const [index, request] of requests.slice(1).entries()) {
+    const repair = JSON.parse(request.messages.at(-1).content[0].text);
+    assert.deepEqual(repair.candidate, candidates[index]);
+    assert.deepEqual(repair.repairContext, context);
+    assert.equal(request.messages.length, 2);
+    assert.doesNotMatch(textOf(request), /ORIGINAL_LARGE_CONTEXT/);
+    assert.deepEqual(request.tools, requests[0].tools);
+    assert.equal(request.messages[0].role, 'system');
+    assert.deepEqual(request.messages[0].content, requests[1].messages[0].content);
+  }
+});
+
+for (const retries of [1, 2, 3]) test(`the last allowed repair succeeds with a retry setting of ${retries}`, async () => {
+  const { caller, requests } = make([...Array.from({ length: retries }, () => tool({})), tool({ ok: true })]);
+  const attempts = [];
+  assert.deepEqual(await caller({ agent, schema, messages: [], retries, onAttempt: record => attempts.push(record) }), { ok: true });
+  assert.equal(requests.length, retries + 1);
+  assert.deepEqual(attempts.map(record => record.status), [...Array(retries).fill('retrying'), 'succeeded']);
+});
+
+test('transport retries do not reset or consume the configured protocol repair budget', async () => {
+  const failure = Object.assign(new Error('temporary disconnect'), { code: 'TRANSPORT' });
+  const { caller, requests } = make([tool({}), failure, tool({}), tool({})], { mode: 'always', maxRetries: 1, initialDelayMs: 0, maxDelayMs: 0, jitterRatio: 0, retryableCodes: [] });
+  const attempts = [];
+  await assert.rejects(caller({ agent, schema, messages: [], retries: 2, onAttempt: record => attempts.push(record) }), ProtocolError);
+  assert.equal(requests.length, 4);
+  assert.deepEqual(attempts.map(record => [record.kind, record.status]), [['protocol', 'retrying'], ['transport', 'retrying'], ['protocol', 'retrying'], ['protocol', 'failed']]);
+});
+
+test('manual cancellation between repairs stops before another model request', async () => {
+  const controller = new AbortController();
+  const { caller, requests } = make([tool({})]);
+  await assert.rejects(caller({ agent, schema, messages: [], retries: 3, signal: controller.signal,
+    onAttempt: record => { if (record.status === 'retrying') controller.abort(new Error('user stopped')); } }), /user stopped/);
+  assert.equal(requests.length, 1);
+});
+
+test('a refusal or truncated response during repair stops before the remaining retries', async () => {
+  for (const response of [{ text: 'I cannot comply with that request.' }, { text: '', finish: { kind: 'refusal' } }, { ...tool('{"ok":'), finish: { kind: 'max-tokens' } }]) {
+    const { caller, requests } = make([tool({}), response]);
+    await assert.rejects(caller({ agent, schema, messages: [], retries: 3 }), ProtocolError);
+    assert.equal(requests.length, 2);
+  }
 });
 
 test('a valid schema cannot bypass character-ownership validation', async () => {
   const shape = { type: 'object', properties: { characterId: { type: 'string' } }, required: ['characterId'] };
   const { caller, requests } = make([tool({ characterId: 'wrong' }), tool({ characterId: 'wrong' })]);
   await assert.rejects(caller({ agent, schema: shape, messages: [], repairContext: { characterId: 'right' }, validate: result => { if (result.characterId !== 'right') throw new ProtocolError('wrong owner'); } }), /wrong owner/);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 4);
 });
 
 test('output truncation fails without repeating an identical output limit', async () => {
