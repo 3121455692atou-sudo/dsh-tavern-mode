@@ -1,6 +1,6 @@
 # DSH 酒馆模式
 
-> **当前预发布：0.4.2-rc.7**。取消酒馆请求中 SDK 自动添加的输出额度，正文目标字数仅作提示，持续输出不按时长或字数截断。详见 [更新说明](REPAIR_RC7.zh-CN.md) 和 [发布页面](https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/tag/v0.4.2-rc.7)。
+> **当前预发布：0.4.2-rc.8**。自动纠错次数按设置执行：设为 3 时，首次请求后最多再纠错 3 次，成功即停止。详见 [更新说明](REPAIR_RC8.zh-CN.md) 和 [发布页面](https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/tag/v0.4.2-rc.8)。
 
 在 DeepSeek Harness 中导入 SillyTavern 角色卡、预设和世界书，使用原生聊天界面进行互动写作。
 
@@ -37,15 +37,17 @@ npm install -g pnpm@11.21.0
 初次安装和更新都使用同一条命令：
 
 ```bash
-dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.2-rc.7/dsh-tavern-mode-0.4.2-rc.7.tgz"
+dsh plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
 ```
+
+这个固定链接会更新为当前发布包；路径与文件名保留 `0.4.0`，包内版本当前为 `0.4.2-rc.8`。需要固定具体版本时，使用对应发布页面中的版本专属下载链接。
 
 安装或升级前先停止正在运行的 `dsh web`。已有插件直接执行同一条 add 命令，无需卸载。安装后重新启动 `dsh web` 并刷新已打开的页面，在输入框上方的模式菜单选择「酒馆模式」，再导入自己的角色卡。发布包已经包含前端构建产物。安装参数 `--allow-build=esbuild` 用于安装脚本编译器，供 HTML 模块加载和酒馆助手更新使用。
 
 使用 npx 启动 dsh 时：
 
 ```bash
-npx @deepseek-ai/dsh@0.1.5-rc.1 plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.2-rc.7/dsh-tavern-mode-0.4.2-rc.7.tgz"
+npx @deepseek-ai/dsh@0.1.5-rc.1 plugin --profile web add --allow-build=esbuild "https://github.com/3121455692atou-sudo/dsh-tavern-mode/releases/download/v0.4.0/dsh-tavern-mode-0.4.0.tgz"
 npx @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
@@ -59,6 +61,7 @@ npx @deepseek-ai/dsh@0.1.5-rc.1 web
 - **资源导入**支持 PNG/JSON 角色卡、世界书、酒馆预设、正则和 ZIP 资源包。推进预设和表格模板可选。
 - **共同事件记忆**按知情范围保存一份事件正文，各角色保留引用与个人变化；私人信息仍隔离。表格或记忆失败后可仅重试未完成更新。
 - **失败续跑**在输入框上方点击「从失败步骤继续」。成功步骤复用本地结果，继续失败步骤及必要后续任务；正文尚未生成时也有入口。持续收到正文、思考或工具参数时不限总时长，连续 60 秒无新内容才停止。
+- **自动纠错**按设置的 0–3 次执行，每个工具或推进任务独立计数。设为 3 时，首次请求后最多额外纠错 3 次，成功即停止；只发送当前结果、错误和必要资料。拒答、没有可修复结果、输出截断、静默超时或取消时停止；网络重试遵循提供方设置。
 - **正文篇幅**在「模型与输入」设置目标字数区间，默认 2000–4000 字。区间写进固定提示词，只计算正文，不含思考与协议数据；超出目标也不截断。旧配置中的 `maxTokens` 不再作为插件输出额度使用。
 - **消息操作**支持编辑、删除、重新生成和分支，关联的表格与角色记忆随剧情版本更新。
 

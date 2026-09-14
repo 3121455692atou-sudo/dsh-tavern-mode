@@ -102,15 +102,16 @@ test('Failed native attempts retain the rejected response and retry count indepe
   const { tasks } = await run.next();
   await assert.rejects(run.execute(tasks[0].id, 'advance', new AbortController().signal), /fewer than 100/);
   await run.completion;
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   let records;
   await api({ method: 'GET' }, {}, '/model-attempts', {}, new URL('http://localhost?id=' + session.id), (_res, data) => { records = data; });
-  assert.equal(records.length, 2);
+  assert.equal(records.length, 4);
   const ordered = records.toSorted((a, b) => a.attempt - b.attempt);
-  assert.deepEqual(ordered.map(r => r.status), ['retrying', 'failed']);
-  assert.deepEqual(ordered.map(r => r.request.mode), ['initial', 'repair']);
+  assert.deepEqual(ordered.map(r => r.status), ['retrying', 'retrying', 'retrying', 'failed']);
+  assert.deepEqual(ordered.map(r => r.request.mode), ['initial', 'repair', 'repair', 'repair']);
   assert.ok(ordered.every(r => r.taskId === tasks[0].id && r.label === '索引' && r.provider === 'fixture'));
   assert.equal(JSON.parse(ordered[1].response.toolCalls[0].arguments).content, '第2次错误返回');
+  assert.equal(JSON.parse(ordered[3].response.toolCalls[0].arguments).content, '第4次错误返回');
   await assert.rejects(store.session(session.id), { code: 'ENOENT' });
 });
 
